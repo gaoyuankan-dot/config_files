@@ -1,11 +1,11 @@
 " scientific network is inevitable, my option is xray + vps
 
 silent! packadd! editexisting
-" source $vimruntime/vimrc_example.vim does more than
-" $vimruntime/defaults.vim.
+" source $vimruntime/vimrc_example.vim does more than $vimruntime/defaults.vim.
 silent! source $VIMRUNTIME/defaults.vim
 silent! source $VIMRUNTIME/ftplugin/man.vim
 
+":set <opntion>? or :echo &<option>, two different commands to show these option values.
 set enc=utf-8
 set spelllang+=cjk
 set linebreak
@@ -13,13 +13,11 @@ set formatoptions+=mM
 " this is for how vim decodes an existing file, which tries one by one.
 set fileencodings=ucs-bom,utf-8,gb18030,latin1
 
-":set <opntion>? or :echo &<option>, two possible commands to show the values.
-set number
-set relativenumber
 "set signcolum=yes
 set scrolloff=0
 set keywordprg=:Man
 set ignorecase smartcase
+set number relativenumber
 set splitright splitbelow
 
 if has('termguicolors')
@@ -32,18 +30,23 @@ if has('persistent_undo')
   set undodir=~/.vim/undodir
   if !isdirectory(&undodir)
     "call is for function invocation, but discards the returning value.
-	call mkdir(&undodir, 'p', 0700)
+    call mkdir(&undodir, 'p', 0700)
   endif
 endif
 
 nmap Q <Nop>
-tnoremap <esc><esc> <C-\><C-N>
-nnoremap <silent> <esc> :noh<cr>
+tnoremap <Esc><Esc> <C-\><C-N>
+nnoremap <silent> <Esc> :noh <CR>
+map <silent> <S-Tab> :pyxf /usr/share/clang/clang-format.py<CR>
 
-if !empty($wayland_display)
-  vnoremap <f1> :w !wl-copy<cr><cr>
-elseif !empty($display)
-  vnoremap <f1> :w !xclip -selection clipboard<cr><cr>
+if has('clipboard')
+  vnoremap <silent> <F1> "+y
+else
+  if !empty($WAYLAND_DISPLAY)
+    vnoremap <silent> <F1> :w !wl-copy <CR><CR>
+  elseif !empty($DISPLAY)
+    vnoremap <silent> <F1> :w !xclip -selection clipboard <CR><CR>
+  endif
 endif
 
 " :verbose set grepprg?
@@ -54,11 +57,10 @@ endif
 
 " unspecified default scope to let variable assignment depending on current scope.
 if has('gui_running')
-
   "set guifont=
   "set guifontwide=
-	let g:do_syntax_sel_menu = 1
-	let g:do_no_lazyload_menu = 1
+  let g:do_syntax_sel_menu = 1
+  let g:do_no_lazyload_menu = 1
 endif
 
 function! s:CheckCPP() abort
@@ -89,6 +91,7 @@ endif
 
 call plug#begin()
 Plug 'airblade/vim-gitgutter'
+Plug 'google/vim-searchindex'
 Plug 'iamcco/markdown-preview.nvim', { 'do': { -> mkdp#util#install() }, 'for': ['markdown', 'vim-plug']}
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
@@ -116,8 +119,9 @@ let g:airline_theme = 'gruvbox'
 let g:airline#extensions#tabline#enabled = 1
 let g:airline#extensions#tabline#show_tab_nr = 0
 let g:airline#extensions#tabline#buffer_nr_show = 1
+" Universal Ctags commands: ctags --fields=+iaS --extras=+q -R .
 set tags=./tags;,tags,/usr/local/etc/systags
-command -nargs=1 RR YcmCompleter RefactorRename <args>
+command! -nargs=1 RR YcmCompleter RefactorRename <args>
 command! -bang -nargs=* -complete=file Make AsyncRun<bang> -program=make @ <args>
 "command! -bang -nargs=* -complete=file Rg silent grep! <args> | redraw! | copen
 " Vim env vars are set like below
@@ -159,6 +163,9 @@ nnoremap <Leader>gh :YcmCompleter GoToDeclaration<CR>
 nnoremap <Leader>gr :YcmCompleter GoToReferences<CR>
 
 let g:ycm_auto_hover = ''
+let g:ycm_autoclose_preview_window_after_insertion = 1
+" Important to use stable and correct version of clang tools
+let g:ycm_clangd_binary_path = "/usr/bin/clangd"
 let g:ycm_clangd_args = ['--header-insertion=iwyu', '--background-index', '-j=4']
 let g:ycm_complete_in_comments = 1
 let g:ycm_complete_in_strings = 1
@@ -176,11 +183,14 @@ if has('autocmd')
   " expandtab isnerts spaces instead of a real tab char
   " softtabstop means how Tab and Backspace behave while editing
   " shiftwidth control indentation commands in vim such as >>, <<
-	au FileType c,cpp,objc setlocal expandtab shiftwidth=4 softtabstop=4 tabstop=4 cinoptions=:0,g0,(0,w1
-	au FileType vim       setlocal expandtab shiftwidth=2 softtabstop=2
-	au FileType json      setlocal expandtab shiftwidth=2 softtabstop=2
-	au FileType help      nnoremap <buffer><silent> q <C-W>c
-        au FileType man       nnoremap <buffer><silent> q :quit<CR>
-        au FileType qf        nnoremap <buffer><silent> q :cclose<CR>
-        au BufRead  /usr/include/*  call GnuIndent()
+  augroup ft_config
+    au!
+    au FileType c,cpp,objc setlocal expandtab shiftwidth=4 softtabstop=4 tabstop=4 cinoptions=:0,g0,(0,w1
+    au FileType sh,vim     setlocal expandtab shiftwidth=2 softtabstop=2
+    au FileType json       setlocal expandtab shiftwidth=2 softtabstop=2
+    au FileType help       nnoremap <buffer><silent> q <C-W>c
+    au FileType man        nnoremap <buffer><silent> q :quit<CR>
+    au FileType qf         nnoremap <buffer><silent> q :cclose<CR>
+    au BufRead  /usr/include/*  call GnuIndent()
+  augroup END
 endif

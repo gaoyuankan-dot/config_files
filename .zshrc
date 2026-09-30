@@ -97,5 +97,3 @@ bindkey '^[[B' history-substring-search-down
 
 # ── Starship prompt ────────────────────────────────────────────────────
 eval "$(starship init zsh)"
-
-export GEMINI_API_KEY="AIzaSyBvLOVZ6wgqy8X38T2VNYYIW5eGhWAAGwY"

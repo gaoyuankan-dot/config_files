@@ -1,0 +1,26 @@
+# ~/.inputrc: GNU readline settings. Readline is the line editor inside bash,
+# and also inside gdb, python3, sqlite3 and many REPLs, so these keys work in
+# all of them. (zsh does NOT use readline; its keys live in ~/.zshrc.)
+
+# Keep the distribution's defaults (Home/End/Delete bindings on Ubuntu).
+$include /etc/inputrc
+
+set completion-ignore-case on        # Tab: `cd doc` matches Documents
+set show-all-if-ambiguous on         # list candidates on the FIRST Tab, not the second
+set mark-symlinked-directories on    # symlinks to dirs complete with a trailing /
+set colored-stats on                 # color candidates like ls (uses LS_COLORS)
+set colored-completion-prefix on     # highlight the part you already typed
+set visible-stats on                 # append / * @ to show file types
+set bell-style none
+
+# Up/Down search history for lines that START with what you typed (zsh's
+# history-substring-search, prefix flavor). Both escape forms: terminals send
+# \e[A normally and \eOA in "application keypad" mode.
+"\e[A": history-search-backward
+"\e[B": history-search-forward
+"\eOA": history-search-backward
+"\eOB": history-search-forward
+
+# Ctrl+Left / Ctrl+Right move by word.
+"\e[1;5C": forward-word
+"\e[1;5D": backward-word

@@ -1,0 +1,8 @@
+-std=c++17
+-Wall
+-Wextra
+-Wpedantic
+-Wshadow
+-Wconversion
+-Wno-sign-conversion
+-I.

@@ -1,0 +1,25 @@
+# .clang-tidy: project-level checks for the clang-tidy COMMAND LINE (and CI):
+#     clang-tidy -p . src/*.c          # -p: where compile_commands.json is
+#
+# clangd reads this file too. Your ~/.config/clangd/config.yaml adds the same
+# families for every project already; copy this file into a project when you
+# also want the checks in CI, or want to change them for that project only.
+# Same choices as the clangd config, for the same measured reasons.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-reserved-identifier,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-assignment-in-if-condition,
+  -bugprone-multi-level-implicit-pointer-conversion,
+  -bugprone-exception-escape,
+  performance-*,
+  -performance-no-int-to-ptr,
+  portability-*
+# Promote checks to errors here once the code base is clean, e.g.
+# WarningsAsErrors: 'bugprone-*'
+WarningsAsErrors: ''
+# Report problems in the project's own headers, not in system headers.
+HeaderFilterRegex: '.*'

@@ -1,0 +1,56 @@
+# ~/.config/clangd/config.yaml: clangd settings for EVERY project.
+#
+# clangd also reads a project's own `.clangd` file (searched upward from the
+# source file) and merges it ON TOP of this one, so per-project fixes such as
+# the AbstractMachine flags in templates/ belong there, not here. Everything in
+# this file must therefore be safe for all code: course labs, xv6, LeetCode.
+#
+# Docs:  https://clangd.llvm.org/config
+# Check: clangd --check=path/to/file.c   (an unknown key is logged as a warning;
+#        scripts/test.sh fails on that, for clangd 21 and 23 alike)
+
+Diagnostics:
+  # Flag #includes that nothing in the file uses (clangd's include-cleaner).
+  UnusedIncludes: Strict
+  # "Include what you use" for missing direct includes. Off globally: course
+  # headers (xv6, AbstractMachine) are not self-contained, so it is noisy there.
+  # Turn it on in a project's .clangd when the project is IWYU-clean.
+  MissingIncludes: None
+  ClangTidy:
+    # clang-tidy checks, run as you type. Kept to high-signal families; the
+    # Remove list drops the checks that are mostly noise in C and course code.
+    Add:
+      - bugprone-*
+      - performance-*
+      - portability-*
+    # Measured on 26 real files (AbstractMachine, klib, xv6, algo): these fired
+    # on correct code, which only trains you to ignore the warning column.
+    Remove:
+      - bugprone-easily-swappable-parameters        # any f(int, int) fires
+      - bugprone-reserved-identifier                # kernels use __names on purpose
+      - bugprone-narrowing-conversions              # duplicates -Wconversion, noisy in C
+      - bugprone-implicit-widening-of-multiplication-result
+      - bugprone-assignment-in-if-condition         # `if ((p = kalloc()) == 0)` is idiomatic C
+      - bugprone-multi-level-implicit-pointer-conversion
+      - bugprone-exception-escape                   # fired on every test program's main()
+      - performance-no-int-to-ptr                   # kernels must cast ints to pointers (MMIO, page tables)
+    # Only run checks clangd knows are fast enough for as-you-type use.
+    FastCheckFilter: Strict
+
+Index:
+  Background: Build           # index the whole project in the background: instant goto/references
+
+InlayHints:
+  # The server computes these; the editor decides whether to draw them
+  # (Vim: :LspInlayHints toggle).
+  Enabled: true
+  ParameterNames: true        # memset(/*s=*/buf, /*c=*/0, /*n=*/len)
+  DeducedTypes: true          # auto x = ...  shows the deduced type
+  Designators: true
+  BlockEnd: false
+
+Hover:
+  ShowAKA: true               # show the canonical type behind a typedef: uintptr_t (aka unsigned long)
+
+Completion:
+  AllScopes: true             # C++: offer symbols from other namespaces, adding the qualifier

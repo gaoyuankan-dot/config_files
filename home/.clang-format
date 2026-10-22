@@ -1,0 +1,121 @@
+---
+# ============================================================================
+# Combined clang-format style — 2026-09-01, probe-validated with clang 22.1.8
+#
+# Merged from the four copies that were on this machine:
+#   ~/.clang-format              (2026-06-27, curated Chromium)  — the BASE;
+#                               it is what actually formatted every file under
+#                               $HOME with no nearer config.
+#   config_files/.clang-format   (2026-05-12, old WebKit dump)   — superseded
+#                               twin; ColumnLimit 76 / cont-indent 4 were
+#                               legacy WebKit choices, retired in June 2026.
+#   xv6-riscv/.clang-format      (kernel-C style, project-local) — borrowed
+#                               AlignConsecutiveMacros only; its return-type /
+#                               brace rules stay project-local so new code
+#                               keeps matching xv6's existing code.
+#   2020-kimi-2.7/syscall/...   (Chromium family)                — its header
+#                               note is kept below.
+#
+# Assembly (.S/.s) is NOT supported by clang-format — vim's `=` with
+# s:AsmIndent() (home/.vimrc) owns those files.
+#
+# Discovery reminder: clang-format walks UP from the file being formatted and
+# the NEAREST .clang-format wins, so a project-local file always overrides
+# this one; no config found at all -> silent LLVM fallback.
+#
+# Validated by dump-config diff: this style differs from the pre-combine home
+# style by EXACTLY one feature — consecutive #define alignment.
+#
+# Re-verified 2026-10-19 on clang-format 21.1.8 (Ubuntu) and 23.1.3 (Arch):
+# both accept every key, and every key has the SAME effective value
+# (--dump-config; e.g. v23 shows BinPackParameters as PackParameters.BinPack).
+# Output was identical on 11 of 12 real files; the 12th differs because
+# v23 stopped aligning an assignment that wraps onto a second line. That is
+# the formatter's algorithm, not this file: pin one clang-format version
+# (e.g. pipx install clang-format==21.1.8) where byte-identical output matters.
+# ============================================================================
+
+Language: Cpp        # governs C files too (the name is historical)
+BasedOnStyle: Chromium
+
+# --- Indentation ---
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 8
+
+# --- Line length ---
+ColumnLimit: 80
+
+# --- Braces ---
+BreakBeforeBraces: Attach
+
+# --- Pointers and references ---
+PointerAlignment: Left
+DerivePointerAlignment: false
+
+# --- Spaces around operators ---
+SpaceAfterCStyleCast: false
+SpaceAfterTemplateKeyword: true
+# Probe-verified 2026-09-01: this option IS valid in clang 22 — the earlier
+# "REMOVED, not a valid option" note was wrong. true is also the Chromium
+# default, so setting it just makes the choice explicit.
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpaceBeforeCpp11BracedList: false
+SpaceAfterLogicalNot: false
+SpacesBeforeTrailingComments: 2
+SpacesInAngles: Never
+SpacesInCStyleCastParentheses: false
+SpacesInContainerLiterals: true
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# --- Single-line blocks (compact but readable) ---
+AllowShortBlocksOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: true
+
+# --- Alignment ---
+AlignAfterOpenBracket: DontAlign
+AlignConsecutiveAssignments: Consecutive
+# Deliberately NOT aligning declarations: renaming one variable re-aligns the
+# whole block -> noisy diffs. (The old WebKit dump had it on; retired.)
+AlignConsecutiveDeclarations: None
+# Borrowed from the xv6 file: aligns consecutive #define values.
+AlignConsecutiveMacros: Consecutive
+AlignEscapedNewlines: Left
+AlignOperands: Align
+AlignTrailingComments: true
+
+# --- Line breaking ---
+AllowAllParametersOfDeclarationOnNextLine: true
+AlwaysBreakAfterDefinitionReturnType: None
+AlwaysBreakBeforeMultilineStrings: true
+BinPackArguments: true
+BinPackParameters: BinPack          # modern spelling of `true`
+BreakAfterReturnType: None          # modern name of AlwaysBreakAfterReturnType
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+BreakStringLiterals: true
+
+# --- Includes ---
+IncludeBlocks: Preserve
+SortIncludes: CaseSensitive         # modern spelling of `true`
+IncludeIsMainRegex: '([-_](test|unittest))?$'
+
+# --- Comments ---
+ReflowComments: Always              # modern spelling of `true`
+
+# --- Lambdas / constructor initializers (C++ side) ---
+AllowShortLambdasOnASingleLine: All
+BreakConstructorInitializers: BeforeColon
+
+# --- Other formatting ---
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+NamespaceIndentation: None

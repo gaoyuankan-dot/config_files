@@ -1,0 +1,23 @@
+# .clangd for the NJU OS labs (AbstractMachine). Copy it to the os-workbench
+# ROOT, next to compile_commands.json:
+#     cp ~/config_files/templates/abstract-machine/.clangd ~/os-workbench/
+#     cd ~/os-workbench/amgame
+#     bear --output ../compile_commands.json -- make -B ARCH=x86_64-qemu
+#
+# It only changes what the EDITOR sees; the real build (gcc + Makefile) is
+# untouched. Both lines below were found by running clangd on the real L0
+# sources (2026-10-19), not guessed.
+#
+# clangd parses with clang, but the lab builds with gcc. Two differences
+# produce errors that make never shows:
+CompileFlags:
+  # 1. AM's entry point is `int main(const char *args)`. gcc only WARNS about
+  #    that signature (and -Wno-main silences it); clang calls it an ERROR
+  #    ([main_arg_wrong]) in a "hosted" program. Bare-metal code is
+  #    FREESTANDING (no OS, no C library): there main is an ordinary function.
+  Add: [-ffreestanding]
+  # 2. AM builds with -Werror. clang has warnings gcc lacks (e.g.
+  #    -Winitializer-overrides in am/src/x86/qemu/ioe.c); -Werror would turn
+  #    them into red "errors" for code that compiles fine. Without it they
+  #    still show, as warnings.
+  Remove: [-Werror]

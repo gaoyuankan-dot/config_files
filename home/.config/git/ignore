@@ -1,0 +1,20 @@
+# ~/.config/git/ignore: patterns ignored in EVERY repository (git's default
+# core.excludesFile). Only litter that tools create on THIS machine belongs
+# here; anything a project may want to commit (.vscode/launch.json, ...) does
+# not. Check why a file is ignored:  git check-ignore -v path/to/file
+
+# Vim swap/backup files: Vim writes them next to the file it edits (for a
+# symlink, next to its target), not into ~/.vim (only undo files go there).
+*.swp
+*.swo
+*~
+
+# clangd: the compilation database is generated (`bear -- make`) and holds
+# absolute paths of this machine; the index is a cache.
+compile_commands.json
+.cache/clangd/
+
+# OS litter
+.DS_Store
+Thumbs.db
+desktop.ini

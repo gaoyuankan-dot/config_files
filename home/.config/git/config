@@ -1,0 +1,59 @@
+# ~/.config/git/config: git defaults shared by every machine.
+#
+# Git reads this XDG file FIRST and ~/.gitconfig AFTER it, so a key set in
+# ~/.gitconfig wins. Your identity (user.name / user.email) therefore stays in
+# ~/.gitconfig on each machine and is never committed here.
+# Inspect where a value comes from:  git config --show-origin --get pull.ff
+
+[init]
+	defaultBranch = main
+
+[pull]
+	# Plain `git pull` never creates a surprise merge commit: if the branches
+	# diverged it stops and asks you to choose. An explicit flag still wins,
+	# so the NJU lab command `git pull --no-rebase --no-edit origin L1` keeps
+	# merging (verified on git 2.53: flags override pull.ff since git 2.34).
+	ff = only
+
+[push]
+	default = simple
+	autoSetupRemote = true    # first push of a new branch sets its upstream
+
+[fetch]
+	prune = true              # forget remote branches that were deleted upstream
+
+[merge]
+	conflictStyle = zdiff3    # conflicts also show the common ancestor (git >= 2.35)
+
+[diff]
+	algorithm = histogram     # clearer diffs when code moves around
+	colorMoved = default      # moved lines get their own color
+
+[rebase]
+	autoStash = true          # stash dirty changes around a rebase, then restore
+
+[rerere]
+	enabled = true            # remember how you resolved a conflict, reuse it next time
+
+[commit]
+	verbose = true            # show the diff below the message while you write it
+
+[help]
+	autocorrect = prompt      # `git stauts` -> "did you mean status? [y/N]"
+
+[branch]
+	sort = -committerdate     # `git branch` lists recently used branches first
+
+[tag]
+	sort = version:refname    # v1.10 sorts after v1.9
+
+[alias]
+	st = status --short --branch
+	lg = log --oneline --graph --decorate --all
+	last = log -1 HEAD --stat
+	unstage = restore --staged
+	amend = commit --amend --no-edit
+
+# Machine-only overrides (a work email, a signing key): never committed.
+[include]
+	path = ~/.config/git/config.local

@@ -1,0 +1,80 @@
+# ~/.config/starship.toml: the prompt, shared by Arch (Konsole) and WSL
+# (Windows Terminal). Two lines:
+#   ╭─<os> <dir> <git branch/status> <language versions> <duration>
+#   ╰─❯
+# Validate after editing:  starship print-config >/dev/null  (warns on bad keys)
+
+format = """
+[╭─](bold green)$os$username$hostname$directory$git_branch$git_status$python$nodejs$rust$c$cmd_duration
+[╰─](bold green)$character"""
+
+[os]
+disabled = false
+# Amber, to match Arch's ribbon. On Arch, Konsole draws the default 🎗 as a
+# COLOR emoji (Noto, #FFD54F) that ignores this style; on WSL the Nerd Font
+# glyph below is monochrome and takes this color. One file, same look on both.
+style = "bold #FFD54F"
+
+# Show the Arch ribbon on Ubuntu too; Ubuntu would otherwise show its own logo.
+# Not the 🎗️ emoji itself: Konsole squeezes it into 1 cell (slim), but Windows
+# Terminal draws it with Segoe UI Emoji at full 2-cell width (fat), and plain
+# U+1F397 without FE0F just overflows into the next cell. A Nerd Font glyph is
+# 1 cell everywhere and takes the [os] style color: nf-fa-ribbon = U+EDA5.
+[os.symbols]
+Ubuntu = " "
+
+[username]
+show_always = false
+format = "[$user]($style)@"
+style_user = "bold green"
+
+[hostname]
+ssh_only = true
+format = "[$hostname]($style):"
+style = "bold yellow"
+
+[directory]
+truncation_length = 3
+truncate_to_repo = true
+style = "bold cyan"
+format = "[ $path]($style)[$read_only]($read_only_style) "
+
+[git_branch]
+format = "[ $branch]($style) "
+style = "bold purple"
+
+[git_status]
+format = '([$all_status$ahead_behind]($style) )'
+style = "bold red"
+conflicted = "⚡"
+ahead = "⇡${count}"
+behind = "⇣${count}"
+untracked = "?"
+modified = "!"
+staged = "+"
+deleted = "✘"
+
+[cmd_duration]
+min_time = 2000
+format = "[ $duration]($style) "
+style = "bold yellow"
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
+
+[python]
+format = "[ $version]($style) "
+style = "bold yellow"
+
+[rust]
+format = "[ $version]($style) "
+style = "bold 208"   # "orange" is not a starship color name (silently ignored); 208 = orange in the 256-color palette
+
+[c]
+format = "[ $version]($style) "
+style = "bold blue"
+
+[nodejs]
+format = "[ $version]($style) "
+style = "bold green"

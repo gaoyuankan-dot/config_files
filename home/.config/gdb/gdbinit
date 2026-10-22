@@ -1,0 +1,36 @@
+# ~/.config/gdb/gdbinit: read by every gdb >= 11 at startup.
+# Check it:  gdb -nx -batch -x ~/.config/gdb/gdbinit   (prints nothing when fine)
+#
+# GOTCHA: gdb has NO trailing comments. `set print pretty on  # note` passes
+# "on  # note" to the command ("on" or "off" expected). Comments go on their
+# own lines, as below.
+
+# History across sessions: Up arrow recalls last session's commands.
+set history save on
+set history size 10000
+set history remove-duplicates unlimited
+set history filename ~/.gdb_history
+
+# Structs one field per line, indented.
+set print pretty on
+# No "--Type <RET> for more--" in long backtraces.
+set pagination off
+# quit/kill without "are you sure?".
+set confirm off
+
+# debuginfod: download debug symbols for system libraries (glibc, ...) on
+# demand, so you can step into them. ON = your Arch laptop's choice
+# (~/.gdbinit, 2026-10), and it also silences the startup question "Enable
+# debuginfod for this session? (y or [n])". Through the proxy the first fetch
+# of a library is slow; turn it off for one session with:
+#   (gdb) set debuginfod enabled off
+#
+# ONE home init file only: gdb reads the FIRST of ~/.config/gdb/gdbinit and
+# ~/.gdbinit that exists and ignores the other (verified, gdb 17.1). So the
+# laptop's two ~/.gdbinit lines are merged here; an old ~/.gdbinit is dead.
+set debuginfod enabled on
+
+# gdb refuses to run a project's own .gdbinit unless its path is trusted
+# (a cloned repo could otherwise run any command on your machine). Trust the
+# exact files you have read, one line each:
+add-auto-load-safe-path ~/xv6-riscv/.gdbinit

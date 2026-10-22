@@ -1,0 +1,5 @@
+# Store and check out every text file with LF line endings, even when it is
+# edited from Windows (VS Code on the Windows side, Notepad, a Windows git).
+# A CRLF shell script fails with "bad interpreter: /bin/sh^M", and a CRLF
+# .vimrc breaks every mapping.
+* text=auto eol=lf

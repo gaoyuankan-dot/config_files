@@ -1,0 +1,3 @@
+# Machine-local files that the dotfiles read but must never be committed
+# (secrets, per-machine overrides): ~/.zshrc.local, ~/.vimrc.local, ...
+*.local

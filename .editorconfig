@@ -1,0 +1,23 @@
+# https://editorconfig.org: editors (Vim 9.1's built-in package, VS Code with
+# the extension) read this and use the same whitespace for this repo.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Vim script, zsh files, YAML, HTML: 2 spaces, as they are written.
+[{*.vim,*vimrc,.zshrc,.zshenv,.zprofile,*.yml,*.yaml,.clangd,.clang-format,.clang-tidy,*.html}]
+indent_size = 2
+
+# Tabs are required in Makefiles, and git writes its config with tabs.
+[{Makefile,config}]
+indent_style = tab
+
+# Markdown uses trailing double spaces as a line break.
+[*.md]
+trim_trailing_whitespace = false

@@ -1,0 +1,60 @@
+# CI: run scripts/test.sh --full on both target distros, in their official
+# container images. Same script you run locally, so a red CI run is something
+# you can reproduce with one command.
+name: test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:          # "Run workflow" button in the Actions tab
+  schedule:
+    - cron: '17 3 * * 1'      # Mondays 03:17 UTC: catch breakage from distro updates
+                              # (a new clang-format dropping a key, a new vim, ...)
+
+permissions:
+  contents: read              # least privilege: this workflow only reads the repo
+
+concurrency:                  # a newer push cancels the older run of the same branch
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false        # one distro failing must not hide the other's result
+      matrix:
+        include:
+          - name: Ubuntu 26.04
+            image: ubuntu:26.04
+          - name: Arch Linux
+            image: archlinux:latest
+    steps:
+      # git first, so checkout makes a real clone instead of a tarball download.
+      - name: Install packages
+        run: |
+          if command -v pacman >/dev/null; then
+            pacman -Syu --noconfirm --needed git ca-certificates curl zsh vim tmux gdb \
+              ripgrep fd bat eza fzf zoxide starship bear clang ctags base-devel \
+              zsh-autosuggestions zsh-syntax-highlighting zsh-history-substring-search \
+              shellcheck shfmt python python-yaml which diffutils
+          else
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update
+            apt-get install -y --no-install-recommends git ca-certificates curl zsh vim tmux gdb \
+              ripgrep fd-find bat eza fzf zoxide starship bear clangd clang-format clang-tidy \
+              universal-ctags build-essential zsh-autosuggestions zsh-syntax-highlighting \
+              shellcheck shfmt python3 python3-yaml
+          fi
+
+      # @v7 follows the current major release. The job only READS the repo,
+      # so don't leave the token behind for later git commands to use.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Test (syntax, lint, install, shells, vim + plugins + clangd, configs)
+        run: scripts/test.sh --full

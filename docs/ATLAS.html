@@ -1,0 +1,1747 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>config_files Atlas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Every file in ~/config_files, the program that reads it, and the moment it runs: shell, Vim, tmux, git, gdb and clang startup flows, traced on the machine.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400..800&display=swap">
+<style>
+/* Layout: a two-pane atlas. The repo's own file tree is the sticky index on the left;
+   numbered plates run down the right, each tied to the moment a program reads a file.
+   Palette: Ken's terminal scheme (Catppuccin Latte by day, Mocha by night), with one
+   meaning per hue: mauve = repo file, blue = program, teal = generated cache,
+   peach = condition, red = failure or guard, green = success or test, grey = system file. */
+:root{
+  --bg:#eff1f5; --panel:#f7f8fa; --box:#ffffff; --sunk:#e6e9ef; --line:#d3d7e0; --line2:#bcc0cc;
+  --fg:#4c4f69; --muted:#5c5f77; --faint:#8c8fa1; --link:#1a56d6;
+  --repo:#7a2fd6; --repo-t:rgba(136,57,239,.11);
+  --prog:#1a56d6; --prog-t:rgba(30,102,245,.09);
+  --cache:#0b7a80; --cache-t:rgba(23,146,153,.11);
+  --cond:#b4480a; --cond-t:rgba(254,100,11,.10);
+  --ok:#2f7d1f; --ok-t:rgba(64,160,43,.11);
+  --bad:#c0102f; --bad-t:rgba(210,15,57,.08);
+  --sys:#5c5f77; --sys-t:rgba(140,143,161,.12);
+  --term-bg:#1e1e2e; --term-fg:#cdd6f4; --term-dim:#7f849c; --term-green:#a6e3a1; --term-cyan:#89dceb;
+  --term-purple:#cba6f7; --term-red:#f38ba8; --term-yellow:#f9e2af; --term-amber:#ffd54f; --term-peach:#fab387;
+  --f-display:"Archivo","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Atkinson Hyperlegible Next","Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1e1e2e; --panel:#181825; --box:#24273a; --sunk:#313244; --line:#363849; --line2:#585b70;
+    --fg:#cdd6f4; --muted:#a6adc8; --faint:#7f849c; --link:#89b4fa;
+    --repo:#cba6f7; --repo-t:rgba(203,166,247,.14);
+    --prog:#89b4fa; --prog-t:rgba(137,180,250,.12);
+    --cache:#94e2d5; --cache-t:rgba(148,226,213,.11);
+    --cond:#fab387; --cond-t:rgba(250,179,135,.12);
+    --ok:#a6e3a1; --ok-t:rgba(166,227,161,.11);
+    --bad:#f38ba8; --bad-t:rgba(243,139,168,.12);
+    --sys:#9399b2; --sys-t:rgba(147,153,178,.13);
+    --term-bg:#11111b;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1e1e2e; --panel:#181825; --box:#24273a; --sunk:#313244; --line:#363849; --line2:#585b70;
+  --fg:#cdd6f4; --muted:#a6adc8; --faint:#7f849c; --link:#89b4fa;
+  --repo:#cba6f7; --repo-t:rgba(203,166,247,.14);
+  --prog:#89b4fa; --prog-t:rgba(137,180,250,.12);
+  --cache:#94e2d5; --cache-t:rgba(148,226,213,.11);
+  --cond:#fab387; --cond-t:rgba(250,179,135,.12);
+  --ok:#a6e3a1; --ok-t:rgba(166,227,161,.11);
+  --bad:#f38ba8; --bad-t:rgba(243,139,168,.12);
+  --sys:#9399b2; --sys-t:rgba(147,153,178,.13);
+  --term-bg:#11111b;
+  color-scheme:dark;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:16.5px/1.6 var(--f-body)}
+a{color:var(--link);text-underline-offset:2px}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--link);outline-offset:2px;border-radius:3px}
+code,kbd{font-family:var(--f-mono);font-size:.86em}
+p code,li code,td code,.n code{background:var(--sunk);padding:0 4px;border-radius:4px;overflow-wrap:anywhere}
+[id]{scroll-margin-top:18px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 72px}
+.shell{max-width:1340px;margin:0 auto;display:grid;grid-template-columns:minmax(0,1fr);gap:28px}
+@media (min-width:1100px){.shell{grid-template-columns:262px minmax(0,1fr);gap:44px}}
+.main{min-width:0;display:grid;gap:60px;max-width:990px}
+
+/* ── side index ─────────────────────────────────────────── */
+.side{min-width:0}
+@media (min-width:1100px){.side{position:sticky;top:calc(env(safe-area-inset-top,0px) + 18px);align-self:start;max-height:calc(100vh - 36px);overflow:auto;padding-right:6px}}
+.side summary{cursor:pointer;list-style:none;font:700 .74rem/1 var(--f-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.side summary::-webkit-details-marker{display:none}
+.side summary::after{content:"  ▾"}
+.side details[open] summary::after{content:"  ▴"}
+.toc{list-style:none;margin:14px 0 4px;padding:0;display:grid;gap:1px;font-size:.9rem}
+.toc a{display:block;padding:2px 8px;border-radius:5px;color:var(--fg);text-decoration:none}
+.toc a:hover{background:var(--sunk)}
+.toc small{font:600 .68rem var(--f-mono);color:var(--faint);margin-right:6px}
+.side h4{margin:16px 0 6px;font:700 .7rem/1 var(--f-display);letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.ftree,.ftree ul{list-style:none;margin:0;padding:0}
+.ftree{font:12.5px/1.5 var(--f-mono)}
+.ftree ul{margin-left:7px;padding-left:10px;border-left:1px solid var(--line)}
+.ftree a{display:block;padding:1px 6px;border-radius:4px;color:var(--fg);text-decoration:none;overflow-wrap:anywhere}
+.ftree a:hover{background:var(--sunk)}
+.ftree .d{display:block;padding:1px 6px;color:var(--muted)}
+.ftree .d em{font-style:normal;color:var(--faint)}
+.ftree .h a{color:var(--repo)}
+.ftree .s a{color:var(--prog)}
+.ftree .x a{color:var(--muted)}
+
+/* ── masthead ───────────────────────────────────────────── */
+.mast{display:grid;gap:22px}
+.eyebrow{font:600 .74rem/1.3 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0}
+h1{margin:0;font:800 clamp(2.3rem,5.6vw,3.7rem)/.98 var(--f-display);font-stretch:118%;letter-spacing:-.012em;text-wrap:balance}
+h1 span{color:var(--repo)}
+.lede{font-size:1.14rem;line-height:1.5;max-width:60ch;margin:0}
+.term{background:var(--term-bg);color:var(--term-fg);font:12.8px/1.7 var(--f-mono);border-radius:10px;padding:14px 16px;overflow-x:auto;white-space:nowrap}
+.term .ok{color:var(--term-green)} .term .warn{color:var(--term-peach)} .term a{color:var(--term-cyan)} .term .dim{color:var(--term-dim)}
+.intro{display:grid;gap:14px 28px}
+@media (min-width:760px){.intro{grid-template-columns:1fr 1fr}}
+.intro h4,.how h4{margin:0 0 4px;font:700 .74rem/1.2 var(--f-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.intro p{margin:0}
+.legend{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;font-size:.86rem;color:var(--muted)}
+.legend b{font:700 .72rem var(--f-display);letter-spacing:.1em;text-transform:uppercase;margin-right:2px}
+
+/* ── parts and plates ───────────────────────────────────── */
+.part{display:grid;gap:24px;min-width:0}
+.part-head{display:grid;gap:6px;max-width:70ch}
+.pk{font:600 .74rem/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--repo)}
+h2{margin:0;font:760 clamp(1.55rem,3.2vw,2.1rem)/1.12 var(--f-display);font-stretch:112%;text-wrap:balance}
+.part-head p{margin:0;color:var(--muted)}
+.plate{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px 18px;display:grid;gap:14px;min-width:0}
+.plate>header{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px}
+.pn{font:600 .72rem/1 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.plate h3{margin:0;font:700 1.22rem/1.25 var(--f-display);font-stretch:106%;text-wrap:balance}
+.plate figcaption{color:var(--muted);font-size:.94rem;max-width:76ch}
+.plate figcaption p{margin:0}
+.plate figcaption p+p{margin-top:6px}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;min-width:0}
+.trap{margin:0;font-size:.95rem;max-width:76ch}
+.tt{display:inline-block;background:var(--cond);color:var(--bg);font:700 .66rem/1.55 var(--f-display);letter-spacing:.1em;text-transform:uppercase;padding:1px 7px;border-radius:3px;margin-right:8px;vertical-align:1px}
+@media (max-width:640px){.plate{padding:14px 12px}}
+
+/* ── chips ──────────────────────────────────────────────── */
+.chip{display:inline-block;font:500 .79rem/1.45 var(--f-mono);padding:1px 7px;border-radius:5px;border:1px solid var(--line2);background:var(--sunk);color:var(--fg);text-decoration:none;overflow-wrap:anywhere;max-width:100%}
+a.chip:hover{text-decoration:underline}
+.chip.repo{color:var(--repo);background:var(--repo-t);border-color:var(--repo);border-color:color-mix(in srgb,var(--repo) 45%,transparent)}
+.chip.prog{color:var(--prog);background:var(--prog-t);border-color:var(--prog);border-color:color-mix(in srgb,var(--prog) 45%,transparent)}
+.chip.cache{color:var(--cache);background:var(--cache-t);border-style:dashed;border-color:var(--cache)}
+.chip.sys{color:var(--sys);background:var(--sys-t);border-style:dotted;border-color:var(--sys)}
+.chip.local{color:var(--muted);background:transparent;border-style:dashed}
+.chip.cond{color:var(--cond);background:var(--cond-t);border-color:var(--cond);border-color:color-mix(in srgb,var(--cond) 45%,transparent)}
+.chip.bad{color:var(--bad);background:var(--bad-t);border-color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
+.chip.ok{color:var(--ok);background:var(--ok-t);border-color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+
+/* ── SVG diagrams ───────────────────────────────────────── */
+.svgd{display:block;width:100%;height:auto;min-width:720px;color:var(--muted)}
+.svgd text{font-family:var(--f-body);font-size:13px;fill:var(--fg)}
+.svgd .tm{font-family:var(--f-mono);font-size:12px}
+.svgd .ts{font-size:11.5px;fill:var(--muted)}
+.svgd .tm.ts{font-size:11px}
+.svgd .tb{font-weight:700}
+.svgd .tl{font-size:11.5px;fill:var(--muted);paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round}
+.svgd .band{font-family:var(--f-display);font-size:11px;font-weight:700;letter-spacing:.12em;fill:var(--muted)}
+.svgd .bx{fill:var(--box);stroke:var(--line2);stroke-width:1.2}
+.svgd .bx-repo{fill:var(--repo-t);stroke:var(--repo)}
+.svgd .bx-prog{fill:var(--prog-t);stroke:var(--prog)}
+.svgd .bx-cache{fill:var(--cache-t);stroke:var(--cache);stroke-dasharray:5 3}
+.svgd .bx-cond{fill:var(--cond-t);stroke:var(--cond)}
+.svgd .bx-ok{fill:var(--ok-t);stroke:var(--ok)}
+.svgd .bx-bad{fill:var(--bad-t);stroke:var(--bad)}
+.svgd .bx-sys{fill:var(--sys-t);stroke:var(--sys);stroke-dasharray:2 3}
+.svgd .bx-sunk{fill:var(--sunk);stroke:var(--line2)}
+.svgd .strong{stroke-width:2.4}
+.svgd .ln{fill:none;stroke:var(--muted);stroke-width:1.4}
+.svgd .ln-d{stroke-dasharray:5 4}
+.svgd .ln-repo{stroke:var(--repo)} .svgd .ln-bad{stroke:var(--bad)} .svgd .ln-ok{stroke:var(--ok)} .svgd .ln-cond{stroke:var(--cond)}
+.svgd .life{stroke:var(--line2);stroke-width:1.2;stroke-dasharray:3 4}
+.svgd .tick{stroke:var(--line2);stroke-width:1.2}
+.svgd .dot{fill:var(--cond)}
+.svgd .mk{fill:var(--muted)} .svgd .mk-repo{fill:var(--repo)} .svgd .mk-bad{fill:var(--bad)} .svgd .mk-ok{fill:var(--ok)} .svgd .mk-cond{fill:var(--cond)}
+.svgd .c-repo{fill:var(--repo)} .svgd .c-prog{fill:var(--prog)} .svgd .c-bad{fill:var(--bad)} .svgd .c-ok{fill:var(--ok)} .svgd .c-cond{fill:var(--cond)} .svgd .c-cache{fill:var(--cache)} .svgd .c-sys{fill:var(--sys)}
+.svgd .hl{fill:var(--cond-t)}
+
+/* ── call trees (traced startup) ────────────────────────── */
+.trace-head{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;font-size:.9rem;color:var(--muted)}
+.ct,.ct ul{list-style:none;margin:0;padding:0}
+.ct{font-size:.95rem}
+.ct ul{margin:3px 0 2px 10px;padding-left:18px;border-left:1px solid var(--line2)}
+.ct li{position:relative;padding:3px 0}
+.ct ul>li::before{content:"";position:absolute;left:-18px;top:15px;width:13px;border-top:1px solid var(--line2)}
+.r{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;min-width:0}
+.r .n{color:var(--muted);font-size:.9rem;flex:1 1 15rem;min-width:0}
+.r .q{font:600 .8rem/1.45 var(--f-mono);color:var(--fg)}
+.lr{font:600 .7rem/1 var(--f-mono);color:var(--faint);white-space:nowrap}
+.ph{padding-top:12px!important}
+.ph>.phl{display:flex;align-items:center;gap:8px;font:700 .72rem/1.3 var(--f-display);letter-spacing:.12em;text-transform:uppercase;color:var(--fg)}
+.ph>.phl::before{content:"";flex:none;width:10px;height:10px;border-radius:2px;background:var(--pc,var(--faint))}
+.ph>.phl small{font:400 .82rem var(--f-body);letter-spacing:0;text-transform:none;color:var(--muted)}
+.ph>ul{border-left-color:var(--pc,var(--line2))}
+.ph.all{--pc:var(--sys)} .ph.login{--pc:var(--prog)} .ph.inter{--pc:var(--repo)} .ph.human{--pc:var(--cond)} .ph.after{--pc:var(--faint)} .ph.vimenter{--pc:var(--ok)}
+.twocol{display:grid;gap:22px}
+@media (min-width:860px){.twocol{grid-template-columns:1fr 1fr}}
+.twocol h4{margin:0 0 4px;font:700 .95rem/1.3 var(--f-display);font-stretch:104%}
+.twocol h4 small{display:block;font:400 .84rem var(--f-body);color:var(--muted)}
+
+/* ── session timeline ───────────────────────────────────── */
+.session{list-style:none;margin:0;padding:0}
+.session>li{display:grid;grid-template-columns:minmax(0,13.5rem) minmax(0,1fr);gap:4px 20px;padding:11px 0 11px 24px;position:relative;border-left:2px solid var(--line2);margin-left:6px}
+.session>li::before{content:"";position:absolute;left:-8px;top:17px;width:10px;height:10px;border-radius:50%;background:var(--panel);border:2px solid var(--prog)}
+.session .cue{display:grid;gap:5px;align-content:start;justify-items:start}
+.session .cmd{font:700 .86rem/1.4 var(--f-mono);color:var(--fg)}
+.session .files{display:flex;flex-wrap:wrap;gap:5px;margin:0}
+.session .eff{margin:5px 0 0;color:var(--muted);font-size:.92rem}
+@media (max-width:640px){.session>li{grid-template-columns:minmax(0,1fr)}}
+
+/* ── matrix ─────────────────────────────────────────────── */
+table{border-collapse:collapse}
+.mx{width:100%;min-width:760px;font-size:.9rem}
+.mx th,.mx td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:center;vertical-align:top}
+.mx thead th{font:700 .8rem/1.25 var(--f-display);color:var(--fg);vertical-align:bottom}
+.mx thead th small{display:block;font:400 .74rem/1.3 var(--f-body);color:var(--muted)}
+.mx tbody th{text-align:left;font-weight:400}
+.mx td.y{color:var(--repo);font-size:1.02rem;line-height:1.2}
+.mx td.y small{display:block;font-size:.7rem;color:var(--muted);line-height:1.25}
+.mx td.no{color:var(--faint)}
+.mx td.half{color:var(--cond);line-height:1.2}
+.mx td.half small{display:block;font-size:.7rem;color:var(--muted)}
+
+/* ── tables, lists, stacks ──────────────────────────────── */
+.tbl{width:100%;font-size:.92rem}
+.tbl th,.tbl td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.tbl thead th{font:700 .78rem/1.3 var(--f-display);letter-spacing:.04em;color:var(--muted)}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0;padding:0;list-style:none;font-size:.92rem}
+.flow>li{background:var(--box);border:1px solid var(--line2);border-radius:7px;padding:6px 10px}
+.flow>li.arrow{background:none;border:0;padding:0;color:var(--muted)}
+.flow>li.c{border-color:var(--cond);background:var(--cond-t)}
+.flow>li.k{border-color:var(--ok);background:var(--ok-t)}
+.flow>li.b{border-color:var(--bad);background:var(--bad-t)}
+.dec{display:grid;gap:8px}
+.dec>div{display:grid;grid-template-columns:minmax(0,15rem) minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:stretch}
+.dec .q,.dec .y,.dec .nn{border-radius:7px;padding:8px 11px;font-size:.9rem;border:1px solid var(--line2);background:var(--box)}
+.dec .q{border-color:var(--cond);background:var(--cond-t)}
+.dec .y b,.dec .nn b{display:block;font:700 .68rem var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+@media (max-width:700px){.dec>div{grid-template-columns:minmax(0,1fr)}}
+.stack{display:grid;gap:6px}
+.layer{display:grid;grid-template-columns:2rem minmax(0,1fr) auto;gap:2px 12px;align-items:center;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:var(--box)}
+.layer .no{font:800 1.15rem/1 var(--f-display);color:var(--faint)}
+.layer .what{font-size:.92rem}
+.layer .what small{display:block;color:var(--muted);font-size:.84rem}
+.layer .cnt{font:600 .74rem var(--f-mono);color:var(--muted);text-align:right}
+.layer.repo{border-color:var(--repo);background:var(--repo-t)}
+.layer.ghost{border-style:dashed;background:transparent}
+.order{display:flex;justify-content:space-between;font:700 .7rem var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.cols2{display:grid;gap:16px}
+@media (min-width:820px){.cols2{grid-template-columns:3fr 2fr}}
+.cols2 h4{margin:0 0 6px;font:700 .74rem/1.2 var(--f-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.plain{margin:0;padding-left:1.1em;font-size:.92rem;display:grid;gap:4px}
+
+/* ── keys ───────────────────────────────────────────────── */
+.frow{display:grid;grid-template-columns:repeat(auto-fill,minmax(6.9rem,1fr));gap:10px}
+.key{display:grid;gap:5px;justify-items:start;align-content:start}
+kbd{display:inline-block;font:700 .8rem/1 var(--f-mono);padding:6px 9px;border-radius:6px;border:1px solid var(--line2);border-bottom-width:3px;background:var(--box);color:var(--fg);white-space:nowrap}
+.key span{font-size:.86rem;color:var(--muted);line-height:1.3}
+.kgroups{display:grid;gap:16px}
+@media (min-width:760px){.kgroups{grid-template-columns:1fr 1fr}}
+.kg h4{margin:0 0 6px;font:700 .74rem/1.2 var(--f-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.kg ul{margin:0;padding:0;list-style:none;display:grid;gap:6px;font-size:.92rem}
+.kg li kbd{font-size:.74rem;padding:3px 6px;border-bottom-width:2px;margin-right:2px}
+
+/* ── prompt mock ────────────────────────────────────────── */
+.prompt{background:var(--term-bg);color:var(--term-fg);font:15px/1.75 var(--f-mono);border-radius:10px;padding:16px 18px;overflow-x:auto;white-space:nowrap}
+.prompt>div{white-space:pre}
+.prompt .g{color:var(--term-green);font-weight:800} .prompt .cy{color:var(--term-cyan);font-weight:800} .prompt .pu{color:var(--term-purple);font-weight:800}
+.prompt .rd{color:var(--term-red);font-weight:800} .prompt .ye{color:var(--term-yellow);font-weight:800} .prompt .am{color:var(--term-amber)}
+.prompt .cur{display:inline-block;width:.6em;height:1.1em;background:var(--term-fg);vertical-align:-.2em;opacity:.8}
+.ribbon{display:inline-block;width:.85em;height:1em;vertical-align:-.12em}
+.anat{display:grid;gap:6px 18px;margin:0;font-size:.92rem}
+@media (min-width:760px){.anat{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.anat>div{display:grid;grid-template-columns:7.5rem minmax(0,1fr);gap:8px;align-items:baseline}
+.anat dt{font:700 .86rem var(--f-mono)}
+.anat dd{margin:0;color:var(--muted)}
+
+/* ── tests ──────────────────────────────────────────────── */
+.bar{display:flex;height:18px;border-radius:5px;overflow:hidden;border:1px solid var(--line2)}
+.bar span{display:block;height:100%}
+.s1{background:var(--ok)} .s2{background:color-mix(in srgb,var(--ok) 82%,var(--panel))} .s3{background:color-mix(in srgb,var(--ok) 66%,var(--panel))}
+.s4{background:color-mix(in srgb,var(--ok) 50%,var(--panel))} .s5{background:color-mix(in srgb,var(--ok) 36%,var(--panel))} .s6{background:color-mix(in srgb,var(--ok) 22%,var(--panel))}
+.secs{display:grid;gap:8px 18px;margin:0;padding:0;list-style:none;font-size:.9rem}
+@media (min-width:760px){.secs{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.secs li{display:grid;grid-template-columns:12px minmax(0,1fr);gap:2px 8px;align-items:start}
+.secs .sw{width:12px;height:12px;border-radius:3px;margin-top:5px;border:1px solid var(--line2)}
+.secs b{font-variant-numeric:tabular-nums}
+.secs span{color:var(--muted)}
+.places{display:grid;gap:10px}
+@media (min-width:760px){.places{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.place{border:1px solid var(--line);background:var(--box);border-radius:8px;padding:10px 12px;font-size:.9rem;display:grid;gap:4px;align-content:start}
+.place b{font-family:var(--f-display)}
+.place code{font-size:.78rem}
+.place span{color:var(--muted)}
+
+/* ── catalog ────────────────────────────────────────────── */
+.cat{display:grid;border-top:1px solid var(--line)}
+.cat-head{display:none}
+.grp{font:700 .74rem/1 var(--f-display);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:20px 0 8px;border-bottom:1px solid var(--line)}
+.grp small{font:400 .82rem var(--f-body);letter-spacing:0;text-transform:none;margin-left:8px}
+.file{display:grid;gap:3px 16px;padding:10px 6px;border-bottom:1px solid var(--line);grid-template-columns:minmax(0,1fr);font-size:.92rem;border-radius:4px}
+.file:target{background:var(--cond-t)}
+.file .p code{font-weight:700;font-size:.82rem;overflow-wrap:anywhere;background:none;padding:0}
+.file .p .dest{display:block;font:500 .72rem/1.4 var(--f-mono);color:var(--muted)}
+.lab{font:700 .66rem var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-right:6px}
+@media (min-width:880px){
+  .cat-head,.file{grid-template-columns:minmax(0,15rem) minmax(0,8.5rem) minmax(0,10.5rem) minmax(0,1fr)}
+  .cat-head{display:grid;gap:3px 16px;padding:10px 6px 6px;font:700 .7rem var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+  .file .lab{display:none}
+}
+
+/* ── findings and learning ──────────────────────────────── */
+.finds{display:grid;gap:12px;margin:0;padding:0;list-style:none}
+.finds>li{display:grid;grid-template-columns:7.2rem minmax(0,1fr);gap:4px 14px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.finds .sev{justify-self:start}
+.finds h4{margin:0 0 3px;font:700 1rem/1.35 var(--f-display);font-stretch:104%}
+.finds p{margin:0;font-size:.93rem}
+.finds p+p{margin-top:5px}
+.finds .ev{color:var(--muted);font-size:.86rem}
+@media (max-width:640px){.finds>li{grid-template-columns:minmax(0,1fr)}}
+.rules{display:grid;gap:12px}
+@media (min-width:760px){.rules{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.rule{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--panel);display:grid;gap:6px;align-content:start;font-size:.92rem}
+.rule h4{margin:0;font:760 1.05rem/1.2 var(--f-display);font-stretch:108%}
+.rule p{margin:0}
+.rule .who{display:flex;flex-wrap:wrap;gap:5px}
+.prose{max-width:72ch;display:grid;gap:12px}
+.prose p,.prose ul,.prose ol{margin:0}
+.prose h3{margin:10px 0 0;font:700 1.15rem/1.25 var(--f-display);font-stretch:106%}
+.stage{display:grid;gap:4px;padding:10px 0;border-top:1px solid var(--line)}
+.stage h4{margin:0;font:700 .98rem var(--f-display)}
+.stage p{margin:0;font-size:.94rem}
+.stage .lbl{font:700 .68rem var(--f-display);letter-spacing:.1em;text-transform:uppercase;color:var(--cond);margin-right:6px}
+.stage .lbl.les{color:var(--ok)}
+.foot{color:var(--muted);font-size:.86rem;border-top:1px solid var(--line);padding-top:16px;max-width:72ch}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<div class="shell">
+
+<nav class="side" aria-label="Contents and repo files">
+  <details id="treebox">
+    <summary>Contents · repo tree</summary>
+    <ol class="toc">
+      <li><a href="#whole"><small>1</small>The whole picture</a></li>
+      <li><a href="#shells"><small>2</small>Shells</a></li>
+      <li><a href="#vim"><small>3</small>Vim and the C tools</a></li>
+      <li><a href="#tools"><small>4</small>tmux, git, gdb, prompt</a></li>
+      <li><a href="#machinery"><small>5</small>The repo's own machinery</a></li>
+      <li><a href="#files"><small>6</small>Every file</a></li>
+      <li><a href="#findings"><small>7</small>Findings</a></li>
+      <li><a href="#learn"><small>8</small>Keep and practice</a></li>
+    </ol>
+    <h4>Repo tree</h4>
+    <ul class="ftree">
+      <li><span class="d">config_files/</span>
+        <ul>
+          <li class="x"><a href="#f-readme">README.md</a></li>
+          <li class="x"><a href="#f-license">LICENSE</a></li>
+          <li class="s"><a href="#f-makefile">Makefile</a></li>
+          <li class="s"><a href="#f-install">install.sh</a></li>
+          <li class="x"><a href="#f-editorconfig">.editorconfig</a></li>
+          <li class="x"><a href="#f-gitattributes">.gitattributes</a></li>
+          <li class="x"><a href="#f-gitignore">.gitignore</a></li>
+          <li class="x"><a href="#f-rootvimrc">vimrc <em>(long twin)</em></a></li>
+          <li><span class="d">.github/workflows/</span>
+            <ul><li class="s"><a href="#f-ci">ci.yml</a></li></ul>
+          </li>
+          <li><span class="d">home/ <em>→ mirrored into ~</em></span>
+            <ul>
+              <li class="h"><a href="#f-zshenv">.zshenv</a></li>
+              <li class="h"><a href="#f-zprofile">.zprofile</a></li>
+              <li class="h"><a href="#f-profile">.profile</a></li>
+              <li class="h"><a href="#f-zshrc">.zshrc</a></li>
+              <li class="h"><a href="#f-bash-profile">.bash_profile</a></li>
+              <li class="h"><a href="#f-bashrc">.bashrc</a></li>
+              <li class="h"><a href="#f-inputrc">.inputrc</a></li>
+              <li class="h"><a href="#f-vimrc">.vimrc</a></li>
+              <li class="h"><a href="#f-ftdetect">.vim/ftdetect/cpp.vim</a></li>
+              <li class="h"><a href="#f-clang-format">.clang-format</a></li>
+              <li><span class="d">.config/</span>
+                <ul>
+                  <li class="h"><a href="#f-common">shell/common.sh</a></li>
+                  <li class="h"><a href="#f-clangd">clangd/config.yaml</a></li>
+                  <li class="h"><a href="#f-gitconfig">git/config</a></li>
+                  <li class="h"><a href="#f-gitignore-global">git/ignore</a></li>
+                  <li class="h"><a href="#f-tmux">tmux/tmux.conf</a></li>
+                  <li class="h"><a href="#f-gdbinit">gdb/gdbinit</a></li>
+                  <li class="h"><a href="#f-starship">starship.toml</a></li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li><span class="d">scripts/</span>
+            <ul>
+              <li class="s"><a href="#f-bootstrap">bootstrap.sh</a></li>
+              <li class="s"><a href="#f-test">test.sh</a></li>
+              <li class="s"><a href="#f-lsp-probe">lsp-probe.py</a></li>
+              <li class="s"><a href="#f-arch-sandbox">arch-sandbox.sh</a></li>
+            </ul>
+          </li>
+          <li><span class="d">templates/ <em>→ copied into projects</em></span>
+            <ul>
+              <li class="x"><a href="#f-tpl-readme">README.md</a></li>
+              <li class="x"><a href="#f-tpl-clang-tidy">.clang-tidy</a></li>
+              <li class="x"><a href="#f-tpl-clangd">abstract-machine/.clangd</a></li>
+              <li class="x"><a href="#f-tpl-flags">cpp-practice/compile_flags.txt</a></li>
+            </ul>
+          </li>
+          <li><span class="d">docs/</span>
+            <ul>
+              <li class="x"><a href="#f-guide">GUIDE.md</a></li>
+              <li class="x"><a href="#f-learn">LEARN-AND-SYNC.md</a></li>
+              <li class="x"><a href="#f-tour">REPO-TOUR.md</a></li>
+              <li class="x"><a href="#f-shellstartup">SHELL-STARTUP.md</a></li>
+              <li class="x"><a href="#f-fixnotes">FIX-NOTES.md</a></li>
+              <li class="x"><a href="#f-atlas">ATLAS.html <em>(this page)</em></a></li>
+              <li class="x"><a href="#f-archive">archive/README.md</a></li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+    </ul>
+  </details>
+</nav>
+
+<main class="main">
+
+<!-- ═══════════════════════════ MASTHEAD ═══════════════════════════ -->
+<header class="mast">
+  <p class="eyebrow">~/config_files · 41 files · 21 plates</p>
+  <h1>config_files <span>Atlas</span></h1>
+  <p class="lede">Every file in the repo, the program that reads it, and the moment it runs. The startup orders below were traced on the machine, not reconstructed from comments.</p>
+  <div class="term">
+    <div><span class="ok">[ ok ]</span> traced 2026-10-20 on Ubuntu 26.04.1 under WSL2 <span class="dim">(Arch-only details are marked)</span></div>
+    <div><span class="ok">[ ok ]</span> zsh 5.9 · Vim 9.1 (patch 2141) · tmux 3.6 · git 2.53 · gdb 17.1 · clangd 21.1.8 · starship 1.22.1</div>
+    <div><span class="ok">[ ok ]</span> scripts/test.sh: 57 passed, 0 failed, 0 skipped</div>
+    <div><span class="ok">[ ok ]</span> 3 loose ends turned up while drawing, fixed 2026-10-21: <a href="#findings">see Findings</a></div>
+  </div>
+  <div class="intro">
+    <div>
+      <h4>In plain words</h4>
+      <p>When a program starts, it reads a few small text files from your home folder: zsh reads <code>~/.zshrc</code>, Vim reads <code>~/.vimrc</code>, git reads <code>~/.config/git/config</code>. This repo keeps all of them in one folder, <code>home/</code>. <code>install.sh</code> puts a symlink in your home folder for each one, so every program reads the repo's copy and git sees every change.</p>
+    </div>
+    <div>
+      <h4>Picture it as a theatre</h4>
+      <p><code>home/</code> is the script library. Each program is an actor who walks on at a fixed cue (a terminal opens, a prompt is drawn, Vim starts) and reads only its own pages. The symlinks are notes on the stage door: “your pages are in the library”. Change a page and the next performance changes, on every stage that pulls the library.</p>
+    </div>
+  </div>
+  <div class="legend" aria-label="Colour key used in every plate">
+    <b>Key</b>
+    <span class="chip repo">repo file</span>
+    <span class="chip sys">system file</span>
+    <span class="chip cache">generated cache</span>
+    <span class="chip local">*.local, never committed</span>
+    <span class="chip prog">program</span>
+    <span class="chip cond">condition</span>
+    <span class="chip bad">failure or guard</span>
+    <span class="chip ok">success or test</span>
+    <span><code>L64–125</code> = line numbers in the file · <code>#12</code> = load position</span>
+  </div>
+</header>
+
+<!-- ═══════════════════════════ PART 1 ═══════════════════════════ -->
+<section class="part" id="whole">
+  <div class="part-head">
+    <span class="pk">Part 1</span>
+    <h2>The whole picture</h2>
+    <p>Two views before the details: how a file gets from the repo into a running program, and which file each moment of a normal session reads.</p>
+  </div>
+
+  <figure class="plate" id="p1">
+    <header><span class="pn">Plate 1</span><h3>From clone to every launch</h3></header>
+    <div class="scroll">
+      <svg class="svgd" viewBox="0 0 972 372" role="img" aria-label="Three rows. Once per machine: bootstrap.sh installs the programs, then install.sh creates 17 symlinks in your home folder and moves anything in the way to a backup folder. Every time a program starts: it opens ~/.zshrc, which is a symlink, so it really reads ~/config_files/home/.zshrc. Every change: you edit ~/.zshrc, which writes that same repo file; test.sh checks it, git push publishes it, and the other machine's git pull updates it with no relinking.">
+        <defs>
+          <marker id="p1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="p1r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-repo" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <text class="band" x="954" y="16" text-anchor="end">ONCE PER MACHINE</text>
+        <rect class="bx" x="18" y="26" width="192" height="58" rx="8"/>
+        <text class="tm tb" x="114" y="50" text-anchor="middle">scripts/bootstrap.sh</text>
+        <text class="ts" x="114" y="70" text-anchor="middle">apt or pacman, with sudo</text>
+        <line class="ln" x1="212" y1="55" x2="262" y2="55" marker-end="url(#p1a)"/>
+        <text class="tl" x="238" y="47" text-anchor="middle">installs</text>
+        <rect class="bx bx-prog" x="266" y="26" width="192" height="58" rx="8"/>
+        <text class="tb" x="362" y="50" text-anchor="middle">zsh vim tmux clangd …</text>
+        <text class="ts" x="362" y="70" text-anchor="middle">the programs, now on PATH</text>
+        <line class="ln" x1="460" y1="55" x2="510" y2="55" marker-end="url(#p1a)"/>
+        <text class="tl" x="486" y="47" text-anchor="middle">then</text>
+        <rect class="bx" x="514" y="26" width="192" height="58" rx="8"/>
+        <text class="tm tb" x="610" y="50" text-anchor="middle">./install.sh</text>
+        <text class="ts" x="610" y="70" text-anchor="middle">POSIX sh, safe to re-run</text>
+        <line class="ln" x1="708" y1="55" x2="758" y2="55" marker-end="url(#p1a)"/>
+        <text class="tl" x="734" y="47" text-anchor="middle">ln -s</text>
+        <rect class="bx bx-repo" x="762" y="26" width="192" height="58" rx="8"/>
+        <text class="tb" x="858" y="50" text-anchor="middle">17 symlinks in ~</text>
+        <text class="ts" x="858" y="70" text-anchor="middle">old files → backup/&lt;time&gt;/</text>
+
+        <path class="ln ln-d" d="M858,84 V118 H362 V150" marker-end="url(#p1a)"/>
+        <text class="tl" x="610" y="112" text-anchor="middle">the same links, opened later</text>
+
+        <text class="band" x="954" y="144" text-anchor="end">EVERY TIME A PROGRAM STARTS</text>
+        <rect class="bx" x="18" y="154" width="192" height="58" rx="8"/>
+        <text class="tb" x="114" y="178" text-anchor="middle">a program starts</text>
+        <text class="ts" x="114" y="198" text-anchor="middle">zsh, vim, tmux, git, gdb …</text>
+        <line class="ln" x1="212" y1="183" x2="262" y2="183" marker-end="url(#p1a)"/>
+        <text class="tl" x="238" y="175" text-anchor="middle">opens</text>
+        <rect class="bx" x="266" y="154" width="192" height="58" rx="8"/>
+        <text class="tm tb" x="362" y="178" text-anchor="middle">~/.zshrc</text>
+        <text class="ts" x="362" y="198" text-anchor="middle">a symlink: only a path</text>
+        <line class="ln" x1="460" y1="183" x2="510" y2="183" marker-end="url(#p1a)"/>
+        <text class="tl" x="486" y="175" text-anchor="middle">follows</text>
+        <rect class="bx bx-repo strong" x="514" y="154" width="192" height="58" rx="8"/>
+        <text class="tm tb" x="610" y="178" text-anchor="middle">home/.zshrc</text>
+        <text class="ts" x="610" y="198" text-anchor="middle">the one real file, in git</text>
+        <line class="ln" x1="708" y1="183" x2="758" y2="183" marker-end="url(#p1a)"/>
+        <text class="tl" x="734" y="175" text-anchor="middle">read</text>
+        <rect class="bx" x="762" y="154" width="192" height="58" rx="8"/>
+        <text class="tb" x="858" y="178" text-anchor="middle">settings applied</text>
+        <text class="ts" x="858" y="198" text-anchor="middle">PATH, keys, plugins, prompt</text>
+
+        <text class="band" x="954" y="282" text-anchor="end">EVERY CHANGE YOU MAKE</text>
+        <rect class="bx" x="18" y="292" width="192" height="58" rx="8"/>
+        <text class="tb" x="114" y="316" text-anchor="middle">you: vim ~/.zshrc</text>
+        <text class="ts" x="114" y="336" text-anchor="middle">writes through the link</text>
+        <line class="ln" x1="212" y1="321" x2="262" y2="321" marker-end="url(#p1a)"/>
+        <text class="tl" x="238" y="313" text-anchor="middle">test</text>
+        <rect class="bx bx-ok" x="266" y="292" width="192" height="58" rx="8"/>
+        <text class="tm tb" x="362" y="316" text-anchor="middle">scripts/test.sh</text>
+        <text class="ts" x="362" y="336" text-anchor="middle">57 checks, throwaway HOME</text>
+        <line class="ln" x1="460" y1="321" x2="510" y2="321" marker-end="url(#p1a)"/>
+        <text class="tl" x="486" y="313" text-anchor="middle">push</text>
+        <rect class="bx" x="514" y="292" width="192" height="58" rx="8"/>
+        <text class="tb" x="610" y="316" text-anchor="middle">GitHub: main</text>
+        <text class="ts" x="610" y="336" text-anchor="middle">git commit, git push</text>
+        <line class="ln" x1="708" y1="321" x2="758" y2="321" marker-end="url(#p1a)"/>
+        <text class="tl" x="734" y="313" text-anchor="middle">pull</text>
+        <rect class="bx" x="762" y="292" width="192" height="58" rx="8"/>
+        <text class="tb" x="858" y="316" text-anchor="middle">the other machine</text>
+        <text class="ts" x="858" y="336" text-anchor="middle">git pull, no relinking</text>
+        <path class="ln ln-d ln-repo" d="M114,292 V252 H610 V216" marker-end="url(#p1r)"/>
+        <text class="tl" x="362" y="246" text-anchor="middle">the same file</text>
+      </svg>
+    </div>
+    <figcaption>
+      <p>The repo never copies anything into <code>~</code>. Each <code>~/X</code> is a signpost to <code>home/X</code>, so a program, your editor and git all touch the same bytes. A <code>git pull</code> needs no reinstall; only a <em>new</em> file under <code>home/</code> needs <code>./install.sh</code> again.</p>
+    </figcaption>
+    <p class="trap"><span class="tt">Beginner trap</span>Editing <code>~/.zshrc</code> does not edit a copy. Check with <code>readlink ~/.zshrc</code>: it prints <code>/home/ken/config_files/home/.zshrc</code>, and <code>git diff</code> in the repo shows your edit at once.</p>
+  </figure>
+
+  <figure class="plate" id="p2">
+    <header><span class="pn">Plate 2</span><h3>One session, and the file each moment reads</h3></header>
+    <ol class="session">
+      <li>
+        <div class="cue"><span class="cmd">open a terminal tab</span><span class="chip prog">zsh, as a login shell</span></div>
+        <div><p class="files"><a class="chip repo" href="#f-zshenv">.zshenv</a><a class="chip repo" href="#f-zprofile">.zprofile</a><a class="chip repo" href="#f-profile">.profile</a><a class="chip repo" href="#f-zshrc">.zshrc</a><a class="chip repo" href="#f-common">.config/shell/common.sh</a></p>
+        <p class="eff">Environment, history, completion, aliases, plugins, prompt hook. <a href="#p3">Plate 3</a></p></div>
+      </li>
+      <li>
+        <div class="cue"><span class="cmd">every prompt</span><span class="chip prog">starship</span></div>
+        <div><p class="files"><a class="chip repo" href="#f-starship">.config/starship.toml</a></p>
+        <p class="eff">The two-line prompt: directory, git state, languages, slow-command timer. <a href="#p17">Plate 17</a></p></div>
+      </li>
+      <li>
+        <div class="cue"><span class="cmd">$ git pull</span><span class="chip prog">git</span></div>
+        <div><p class="files"><a class="chip repo" href="#f-gitconfig">.config/git/config</a><a class="chip repo" href="#f-gitignore-global">.config/git/ignore</a><span class="chip local">~/.gitconfig (identity)</span></p>
+        <p class="eff"><code>pull.ff=only</code> refuses a surprise merge; <code>*.swp</code> is ignored in every repo. <a href="#p15">Plate 15</a></p></div>
+      </li>
+      <li>
+        <div class="cue"><span class="cmd">$ tmux</span><span class="chip prog">tmux server</span></div>
+        <div><p class="files"><a class="chip repo" href="#f-tmux">.config/tmux/tmux.conf</a></p>
+        <p class="eff">Read once, when the server starts. Every new pane is a new <em>login</em> zsh, so the first row repeats. <a href="#p14">Plate 14</a></p></div>
+      </li>
+      <li>
+        <div class="cue"><span class="cmd">$ vim main.c</span><span class="chip prog">Vim</span></div>
+        <div><p class="files"><a class="chip repo" href="#f-vimrc">.vimrc</a><a class="chip repo" href="#f-ftdetect">.vim/ftdetect/cpp.vim</a></p>
+        <p class="eff">Options, keys, 23 plugins, the LSP setup handed to the plugin later. <a href="#p8">Plate 8</a></p></div>
+      </li>
+      <li>
+        <div class="cue"><span class="cmd">main.c opens</span><span class="chip prog">clangd</span></div>
+        <div><p class="files"><a class="chip repo" href="#f-clangd">.config/clangd/config.yaml</a><span class="chip">&lt;project&gt;/.clangd</span><span class="chip cache">compile_commands.json</span></p>
+        <p class="eff">Errors and clang-tidy hints while you type. <a href="#p9">Plates 9</a> and <a href="#p10">10</a></p></div>
+      </li>
+      <li>
+        <div class="cue"><span class="cmd">Shift-Tab</span><span class="chip prog">clang-format</span></div>
+        <div><p class="files"><a class="chip repo" href="#f-clang-format">.clang-format</a></p>
+        <p class="eff">Chromium-based style: 4-space indent, 80 columns. The nearest <code>.clang-format</code> wins. <a href="#p11">Plate 11</a></p></div>
+      </li>
+      <li>
+        <div class="cue"><span class="cmd">$ gdb ./a.out</span><span class="chip prog">gdb + readline</span></div>
+        <div><p class="files"><a class="chip repo" href="#f-gdbinit">.config/gdb/gdbinit</a><a class="chip repo" href="#f-inputrc">.inputrc</a></p>
+        <p class="eff">History, pretty structs, no pager, no “are you sure?”, debug symbols on demand. <a href="#p16">Plate 16</a></p></div>
+      </li>
+      <li>
+        <div class="cue"><span class="cmd">$ bash</span><span class="chip prog">bash + readline</span></div>
+        <div><p class="files"><a class="chip repo" href="#f-bashrc">.bashrc</a><a class="chip repo" href="#f-common">.config/shell/common.sh</a><a class="chip repo" href="#f-inputrc">.inputrc</a></p>
+        <p class="eff">The same aliases as zsh. A login bash (<code>bash -l</code>) first reads <a href="#f-bash-profile">.bash_profile</a>, which loads <code>.profile</code>. <a href="#p4">Plate 4</a></p></div>
+      </li>
+    </ol>
+    <figcaption><p>All 17 files under <code>home/</code> appear once in this list. Nothing reads them in the background: each one is read at a cue, by one program.</p></figcaption>
+  </figure>
+</section>
+
+<!-- ═══════════════════════════ PART 2: SHELLS ═══════════════════════════ -->
+<section class="part" id="shells">
+  <div class="part-head">
+    <span class="pk">Part 2</span>
+    <h2>Shells: who sources whom</h2>
+    <p>The order below comes from <code>zsh -o sourcetrace</code> and bash's <code>PS4</code> trace, both run inside a real terminal (<code>script</code>), with the repo installed as it is today.</p>
+  </div>
+
+  <figure class="plate" id="p3">
+    <header><span class="pn">Plate 3</span><h3>A login zsh, as traced</h3></header>
+    <div class="trace-head"><span class="chip prog">-zsh</span> started by Windows Terminal through <code>wsl.exe</code>, or by a tmux pane. The leading <code>-</code> means login shell (verified with <code>ps</code>).</div>
+    <ol class="ct">
+      <li class="ph all"><div class="phl">every zsh <small>scripts and <code>zsh -c</code> too</small></div>
+        <ul>
+          <li><div class="r"><span class="chip sys">/etc/zsh/zshenv</span><span class="n">sets PATH only when it is empty</span></div></li>
+          <li><div class="r"><a class="chip repo" href="#f-zshenv">~/.zshenv</a><span class="n"><code>skip_global_compinit=1</code>: tells Ubuntu's zshrc not to run its own <code>compinit</code></span></div></li>
+        </ul>
+      </li>
+      <li class="ph login"><div class="phl">login shells only</div>
+        <ul>
+          <li><div class="r"><span class="chip sys">/etc/zsh/zprofile</span><span class="n">Ubuntu: comments only. Arch: sources <code>/etc/profile</code> itself.</span></div></li>
+          <li><div class="r"><a class="chip repo" href="#f-zprofile">~/.zprofile</a><span class="n">runs two POSIX files in <code>emulate sh</code> mode</span></div>
+            <ul>
+              <li><div class="r"><span class="chip sys">/etc/profile</span><span class="n">≈13 ms on its own</span></div>
+                <ul><li><div class="r"><span class="chip sys">/etc/profile.d/*.sh</span><span class="n">13 scripts here: locale, <code>proxy.sh</code>, <code>debuginfod.sh</code>, <code>bash_completion.sh</code> …</span></div></li></ul>
+              </li>
+              <li><div class="r"><a class="chip repo" href="#f-profile">~/.profile</a><span class="n">exported environment: PATH (<code>~/bin</code>, <code>~/.local/bin</code>), <code>EDITOR=VISUAL=vim</code>, <code>LESS</code>, <code>COLORTERM=truecolor</code> in Windows Terminal</span></div>
+                <ul><li><div class="r"><span class="chip local">~/.profile.local</span><span class="n">absent on this machine</span></div></li></ul>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+      <li class="ph inter"><div class="phl">interactive shells</div>
+        <ul>
+          <li><div class="r"><span class="chip sys">/etc/zsh/zshrc</span><span class="n">sees the flag and skips its <code>compinit</code></span></div></li>
+          <li><div class="r"><a class="chip repo" href="#f-zshrc">~/.zshrc</a><span class="n">167 lines, top to bottom</span></div>
+            <ul>
+              <li><div class="r"><span class="q">PATH dedupe, helpers</span><span class="lr">L9–50</span><span class="n"><code>typeset -U path</code>; <code>has</code>, <code>source_first</code>, <code>_cached_init</code></span></div></li>
+              <li><div class="r"><span class="q">history</span><span class="lr">L53–63</span><span class="n">50 000 lines, shared between terminals, timestamps</span></div></li>
+              <li><div class="r"><span class="chip cache">…/init/_usr_bin_dircolors_-b.zsh</span><span class="n">LS_COLORS, from the cache (<a href="#p7">Plate 7</a>)</span></div></li>
+              <li><div class="r"><span class="chip cache">~/.cache/zsh/zcompdump-5.9</span><span class="n"><code>compinit -C</code>; the full security audit runs once a day</span></div></li>
+              <li><div class="r"><span class="q">options, keys</span><span class="lr">L90–109</span><span class="n">AUTO_CD, CORRECT, emacs keys, Home/End, Ctrl-←/→</span></div></li>
+              <li><div class="r"><a class="chip repo" href="#f-common">~/.config/shell/common.sh</a><span class="n">wrappers, aliases, proxy (<a href="#p6">Plate 6</a>)</span></div>
+                <ul><li><div class="r"><span class="chip sys">/etc/profile.d/proxy.sh</span><span class="n">again: the WSL proxy's one source of truth</span></div></li></ul>
+              </li>
+              <li><div class="r"><span class="chip cache">…/init/_usr_bin_zoxide_init_zsh.zsh</span><span class="n"><code>z proj</code> jumps to a visited folder</span></div></li>
+              <li><div class="r"><span class="chip sys">/etc/zsh_command_not_found</span><span class="n">suggests the package to install</span></div></li>
+              <li><div class="r"><span class="chip local">~/.zshrc.local</span><span class="n">secrets go here; absent on this machine</span></div></li>
+              <li class="ph human"><div class="phl">if zle is on and stdin is a terminal <small>a person is typing</small></div>
+                <ul>
+                  <li><div class="r"><span class="chip cache">…/init/_usr_bin_fzf_--zsh.zsh</span><span class="n">Ctrl-R history, Ctrl-T files, Alt-C cd</span></div></li>
+                  <li><div class="r"><span class="chip sys">zsh-autosuggestions</span><span class="n">grey completion from history</span></div></li>
+                  <li><div class="r"><span class="chip sys">zsh-syntax-highlighting</span><span class="n">+7 highlighter files; must load after widgets it wraps</span></div></li>
+                  <li><div class="r"><span class="chip sys">~/.local/share/…/zsh-history-substring-search</span><span class="n">cloned by <code>bootstrap.sh</code> (not packaged on Ubuntu); ↑ ↓ search by what you typed</span></div></li>
+                </ul>
+              </li>
+              <li><div class="r"><span class="chip cache">…/init/_usr_bin_starship_init_zsh.zsh</span><span class="n">installs the prompt hook (<a href="#p17">Plate 17</a>)</span></div></li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+      <li class="ph after"><div class="phl">login shells, after the rc files</div>
+        <ul>
+          <li><div class="r"><span class="chip sys">/etc/zsh/zlogin</span><span class="n">comments only; there is no <code>~/.zlogin</code>. On exit: <code>/etc/zsh/zlogout</code>.</span></div></li>
+        </ul>
+      </li>
+    </ol>
+    <figcaption>
+      <p>Measured today in a real terminal, median of 8 runs: <b>81 ms</b> for this login shell, <b>62 ms</b> for a non-login one. The 19 ms gap is the login-only part, mostly <code>/etc/profile</code> and its 13 scripts. Without a terminal the plugin block is skipped: <code>test.sh</code> measured 20 ms.</p>
+    </figcaption>
+    <p class="trap"><span class="tt">Beginner trap</span>zsh never reads <code>~/.profile</code> on its own. It reads it here only because <code>~/.zprofile</code> sources it, in <code>emulate sh</code> mode so zsh-only behaviour cannot change what the POSIX file means.</p>
+  </figure>
+
+  <figure class="plate" id="p4">
+    <header><span class="pn">Plate 4</span><h3>bash, login and not</h3></header>
+    <div class="twocol">
+      <div>
+        <h4>bash -l <small>login and interactive: an ssh login, or bash as a terminal's shell</small></h4>
+        <ol class="ct">
+          <li><div class="r"><span class="chip sys">/etc/profile</span></div>
+            <ul>
+              <li><div class="r"><span class="chip sys">/etc/bash.bashrc</span><span class="n">Debian: sourced from <code>/etc/profile</code> when interactive</span></div>
+                <ul><li><div class="r"><span class="chip sys">vte-2.91.sh, proxy.sh</span></div></li></ul>
+              </li>
+              <li><div class="r"><span class="chip sys">/etc/profile.d/*.sh</span><span class="n"><code>bash_completion.sh</code> loads bash-completion here</span></div></li>
+            </ul>
+          </li>
+          <li><div class="r"><a class="chip repo" href="#f-bash-profile">~/.bash_profile</a><span class="n">bash reads the first of <code>.bash_profile</code>, <code>.bash_login</code>, <code>.profile</code>, then stops</span></div>
+            <ul>
+              <li><div class="r"><a class="chip repo" href="#f-profile">~/.profile</a><span class="n">the same environment zsh gets</span></div></li>
+              <li><div class="r"><a class="chip repo" href="#f-bashrc">~/.bashrc</a><span class="n">a login bash never reads it on its own</span></div>
+                <ul>
+                  <li><div class="r"><span class="chip bad">return unless interactive</span><span class="lr">L7–10</span><span class="n">keeps <code>scp</code>, <code>rsync</code>, <code>ssh host cmd</code> silent</span></div></li>
+                  <li><div class="r"><span class="q">PATH, history, shopt</span><span class="lr">L14–32</span><span class="n">history written after every command</span></div></li>
+                  <li><div class="r"><span class="q">bash-completion</span><span class="n">skipped: already loaded</span></div></li>
+                  <li><div class="r"><a class="chip repo" href="#f-common">common.sh</a><span class="n">the same wrappers and aliases as zsh</span></div></li>
+                  <li><div class="r"><span class="q">fzf --bash, zoxide, starship</span><span class="n">plus <span class="chip local">~/.bashrc.local</span></span></div></li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+      <div>
+        <h4>bash <small>interactive, not login: a VS Code terminal, or <code>bash</code> typed in zsh</small></h4>
+        <ol class="ct">
+          <li><div class="r"><span class="chip sys">/etc/bash.bashrc</span><span class="n">bash reads it directly</span></div>
+            <ul><li><div class="r"><span class="chip sys">vte-2.91.sh, proxy.sh</span></div></li></ul>
+          </li>
+          <li><div class="r"><a class="chip repo" href="#f-bashrc">~/.bashrc</a><span class="n">no <code>.profile</code>: the environment is inherited from the parent</span></div>
+            <ul>
+              <li><div class="r"><span class="q">PATH += ~/.local/bin</span><span class="n">only if missing, for shells that never read <code>.profile</code></span></div></li>
+              <li><div class="r"><span class="q">bash-completion</span><span class="n">loaded here: nobody loaded it yet</span></div></li>
+              <li><div class="r"><a class="chip repo" href="#f-common">common.sh</a><span class="n">then the same tail as the left column</span></div></li>
+            </ul>
+          </li>
+        </ol>
+        <p class="trap" style="margin-top:14px"><span class="tt">Beginner trap</span>A login bash skips <code>~/.bashrc</code>. That is why <code>~/.bash_profile</code> exists at all: it loads <code>.profile</code>, then hands over to <code>.bashrc</code>.</p>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="plate" id="p5">
+    <header><span class="pn">Plate 5</span><h3>Which repo files each kind of shell reads</h3></header>
+    <div class="scroll">
+      <table class="mx">
+        <thead>
+          <tr>
+            <th scope="col" style="text-align:left">file</th>
+            <th scope="col">zsh login<small>terminal tab, tmux pane, ssh</small></th>
+            <th scope="col">zsh<small>VS Code, typed <code>zsh</code></small></th>
+            <th scope="col">zsh -c<small>scripts</small></th>
+            <th scope="col">bash -l<small>login bash</small></th>
+            <th scope="col">bash<small>typed <code>bash</code>, VS Code</small></th>
+            <th scope="col">ssh host cmd<small>bash, no tty</small></th>
+            <th scope="col">sh -l<small>dash login</small></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row"><a class="chip repo" href="#f-zshenv">.zshenv</a></th><td class="y">●</td><td class="y">●</td><td class="y">●</td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="no">–</td></tr>
+          <tr><th scope="row"><a class="chip repo" href="#f-zprofile">.zprofile</a></th><td class="y">●</td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="no">–</td></tr>
+          <tr><th scope="row"><a class="chip repo" href="#f-profile">.profile</a></th><td class="y">●<small>via .zprofile</small></td><td class="no">–</td><td class="no">–</td><td class="y">●<small>via .bash_profile</small></td><td class="no">–</td><td class="no">–</td><td class="y">●</td></tr>
+          <tr><th scope="row"><a class="chip repo" href="#f-zshrc">.zshrc</a></th><td class="y">●</td><td class="y">●</td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="no">–</td></tr>
+          <tr><th scope="row"><a class="chip repo" href="#f-bash-profile">.bash_profile</a></th><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="y">●</td><td class="no">–</td><td class="no">–</td><td class="no">–</td></tr>
+          <tr><th scope="row"><a class="chip repo" href="#f-bashrc">.bashrc</a></th><td class="no">–</td><td class="no">–</td><td class="no">–</td><td class="y">●<small>via .bash_profile</small></td><td class="y">●</td><td class="half">◐<small>returns at L9</small></td><td class="no">–</td></tr>
+          <tr><th scope="row"><a class="chip repo" href="#f-common">common.sh</a></th><td class="y">●</td><td class="y">●</td><td class="no">–</td><td class="y">●</td><td class="y">●</td><td class="no">–</td><td class="no">–</td></tr>
+          <tr><th scope="row"><a class="chip repo" href="#f-inputrc">.inputrc</a></th><td class="no">–<small>zsh has ZLE</small></td><td class="no">–</td><td class="no">–</td><td class="y">●<small>readline</small></td><td class="y">●<small>readline</small></td><td class="no">–</td><td class="no">–</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption>
+      <p>Columns 1–5 were traced today; the <code>ssh host cmd</code> column follows bash(1) and the guard at <code>.bashrc</code> L7–10; <code>sh -l</code> is checked by <code>test.sh</code> section 4. On Arch, Konsole's default profile usually starts zsh <em>without</em> <code>-l</code>, so a Konsole tab behaves like column 2 (not traced here; <code>echo $0</code> shows a leading <code>-</code> for a login shell).</p>
+    </figcaption>
+    <p class="trap"><span class="tt">Beginner trap</span>“Login” and “interactive” are two separate switches, not two kinds of shell. A Windows Terminal tab is both, <code>zsh -c</code> is neither, a VS Code terminal is interactive only. And every tmux pane is a login shell (verified: <code>-zsh</code>), so <code>.profile</code> runs again in each pane. That is why it must be safe to run twice.</p>
+  </figure>
+
+  <figure class="plate" id="p6">
+    <header><span class="pn">Plate 6</span><h3>Human or program: the <code>[ -t 0 ]</code> switch in common.sh</h3></header>
+    <div class="scroll">
+      <svg class="svgd" viewBox="0 0 960 266" role="img" aria-label="Two callers run the same command rm -r build/. A person at the keyboard has file descriptor 0 connected to a terminal; a script or AI agent has it connected to a pipe or /dev/null. The rm function in common.sh tests [ -t 0 ]: with a terminal it runs rm -I, which asks once; without one it runs plain rm, which deletes without asking, because nobody could answer a prompt.">
+        <defs>
+          <marker id="p6a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="p6o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-ok" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="p6c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-cond" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <rect class="bx" x="18" y="18" width="232" height="76" rx="8"/>
+        <text class="tb" x="134" y="40" text-anchor="middle">you, at the keyboard</text>
+        <text class="tm" x="134" y="61" text-anchor="middle">$ rm -r build/</text>
+        <text class="tm ts" x="134" y="81" text-anchor="middle">fd 0 = /dev/pts/3, a tty</text>
+        <rect class="bx" x="18" y="172" width="232" height="76" rx="8"/>
+        <text class="tb" x="134" y="194" text-anchor="middle">a script or an AI agent</text>
+        <text class="tm" x="134" y="215" text-anchor="middle">rm -r build/</text>
+        <text class="tm ts" x="134" y="235" text-anchor="middle">fd 0 = a pipe or /dev/null</text>
+        <line class="ln" x1="250" y1="56" x2="326" y2="100" marker-end="url(#p6a)"/>
+        <text class="tl" x="290" y="64" text-anchor="middle">calls rm()</text>
+        <line class="ln" x1="250" y1="210" x2="326" y2="166" marker-end="url(#p6a)"/>
+        <text class="tl" x="290" y="212" text-anchor="middle">calls rm()</text>
+
+        <text class="ts" x="480" y="22" text-anchor="middle">~/.config/shell/common.sh, line 67</text>
+        <rect class="bx bx-repo" x="330" y="30" width="300" height="206" rx="8"/>
+        <text class="tm" x="348" y="60">rm() {</text>
+        <text class="tm" x="366" y="88">if [ -t 0 ]</text>
+        <text class="ts c-cond tb" x="456" y="88">← is fd 0 a terminal?</text>
+        <text class="tm" x="366" y="116">then command rm -I "$@"</text>
+        <text class="tm" x="366" y="144">else command rm "$@"</text>
+        <text class="tm" x="366" y="172">fi</text>
+        <text class="tm" x="348" y="200">}</text>
+
+        <line class="ln ln-ok" x1="540" y1="112" x2="704" y2="70" marker-end="url(#p6o)"/>
+        <text class="tl" x="690" y="58" text-anchor="middle">yes</text>
+        <line class="ln ln-cond" x1="520" y1="140" x2="704" y2="196" marker-end="url(#p6c)"/>
+        <text class="tl" x="690" y="214" text-anchor="middle">no</text>
+        <rect class="bx bx-ok" x="708" y="30" width="234" height="76" rx="8"/>
+        <text class="tb" x="825" y="56" text-anchor="middle">asks once</text>
+        <text class="tm ts" x="825" y="76" text-anchor="middle">rm: remove 1 argument</text>
+        <text class="tm ts" x="825" y="93" text-anchor="middle">recursively?</text>
+        <rect class="bx bx-cond" x="708" y="160" width="234" height="76" rx="8"/>
+        <text class="tb" x="825" y="186" text-anchor="middle">deletes, no question</text>
+        <text class="ts" x="825" y="206" text-anchor="middle">nobody could answer, and</text>
+        <text class="ts" x="825" y="223" text-anchor="middle">rm -i would read EOF as “no”</text>
+      </svg>
+    </div>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th>name</th><th>tests</th><th>a person at a terminal gets</th><th>a pipe, script or agent gets</th></tr></thead>
+        <tbody>
+          <tr><td><code>ls</code></td><td>fd 0 and fd 1</td><td><code>eza --icons --group-directories-first</code></td><td><code>command ls</code></td></tr>
+          <tr><td><code>ll</code> / <code>lt</code></td><td>fd 0</td><td><code>eza -la --git</code> / <code>eza --tree --level=2</code></td><td><code>ls -alF</code> / <code>ls -R</code></td></tr>
+          <tr><td><code>cat</code></td><td>fd 1</td><td><code>bat</code> (or <code>batcat</code>) with colours</td><td><code>command cat</code></td></tr>
+          <tr><td><code>rm</code> <code>cp</code> <code>mv</code></td><td>fd 0</td><td><code>-I</code> / <code>-i</code> / <code>-i</code></td><td>the plain command</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="dec" aria-label="How common.sh decides whether to turn the proxy on">
+      <div>
+        <div class="q">Is <code>/etc/profile.d/proxy.sh</code> readable?</div>
+        <div class="y"><b>yes</b>source it: on WSL that one file is shared by bash, sudo and apt</div>
+        <div class="nn"><b>no</b>ask the next question</div>
+      </div>
+      <div>
+        <div class="q">Is anything listening on <code>127.0.0.1:10808</code>?</div>
+        <div class="y"><b>yes</b><code>proxy-on -q</code>: http(s)_proxy plus <code>all_proxy=socks5h://…</code></div>
+        <div class="nn"><b>no</b>leave it off: a dead proxy breaks every download (the probe costs ~1 ms)</div>
+      </div>
+    </div>
+    <figcaption><p>Each wrapper tests the file descriptor it cares about: <code>cat</code> asks whether its <em>output</em> goes to a screen, <code>rm</code> asks whether its <em>input</em> comes from a person. The eza bug that started this: with no path and a non-terminal stdin, eza read file names from stdin and printed nothing.</p></figcaption>
+    <p class="trap"><span class="tt">Beginner trap</span><code>zsh -i</code> does not mean a person is there. Claude Code and other agents start interactive shells with no terminal attached. Only <code>[ -t 0 ]</code> (or zsh's <code>-t 0</code>) answers “is someone typing?”, which is why <code>.zshrc</code> L132 tests <code>[[ -o zle &amp;&amp; -t 0 ]]</code>, not just <code>-o zle</code>.</p>
+  </figure>
+
+  <figure class="plate" id="p7">
+    <header><span class="pn">Plate 7</span><h3>_cached_init: tool setup without a subprocess</h3></header>
+    <div class="scroll">
+      <svg class="svgd" viewBox="0 0 960 272" role="img" aria-label="_cached_init starship init zsh names a cache file from the binary path and arguments. If the cache is newer than /usr/bin/starship, it is sourced with no subprocess. If not, the tool runs into a temporary file, which is moved into place atomically and then sourced. If the tool fails or prints nothing, the temporary file is deleted and the old cache is kept.">
+        <defs>
+          <marker id="p7a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="p7b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-bad" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <rect class="bx" x="18" y="26" width="206" height="66" rx="8"/>
+        <text class="tm tb" x="121" y="53" text-anchor="middle">_cached_init</text>
+        <text class="tm" x="121" y="74" text-anchor="middle">starship init zsh</text>
+        <line class="ln" x1="226" y1="59" x2="264" y2="59" marker-end="url(#p7a)"/>
+        <text class="tl" x="245" y="51" text-anchor="middle">names</text>
+        <rect class="bx bx-cache" x="268" y="26" width="262" height="66" rx="8"/>
+        <text class="ts" x="399" y="45" text-anchor="middle">cache file, key = binary path + args</text>
+        <text class="tm ts" x="399" y="64" text-anchor="middle">~/.cache/zsh/init/</text>
+        <text class="tm ts" x="399" y="81" text-anchor="middle">_usr_bin_starship_init_zsh.zsh</text>
+        <line class="ln" x1="532" y1="59" x2="566" y2="59" marker-end="url(#p7a)"/>
+        <text class="tl" x="549" y="51" text-anchor="middle">check</text>
+        <rect class="bx bx-cond" x="570" y="26" width="180" height="66" rx="8"/>
+        <text x="660" y="53" text-anchor="middle">cache newer than</text>
+        <text class="tm" x="660" y="74" text-anchor="middle">/usr/bin/starship?</text>
+        <line class="ln ln-ok" x1="752" y1="59" x2="782" y2="59" marker-end="url(#p7a)"/>
+        <text class="tl" x="767" y="51" text-anchor="middle">yes</text>
+        <rect class="bx bx-ok" x="786" y="26" width="156" height="66" rx="8"/>
+        <text class="tb" x="864" y="53" text-anchor="middle">source it</text>
+        <text class="ts" x="864" y="74" text-anchor="middle">no subprocess</text>
+
+        <line class="ln" x1="660" y1="92" x2="660" y2="184" marker-end="url(#p7a)"/>
+        <text class="tl" x="670" y="142">no</text>
+        <rect class="bx" x="570" y="188" width="180" height="66" rx="8"/>
+        <text x="660" y="215" text-anchor="middle">run the tool</text>
+        <text class="tm ts" x="660" y="236" text-anchor="middle">&gt;| cache.$$ (temp)</text>
+        <line class="ln" x1="752" y1="221" x2="782" y2="221" marker-end="url(#p7a)"/>
+        <text class="tl" x="767" y="213" text-anchor="middle">ok</text>
+        <rect class="bx" x="786" y="188" width="156" height="66" rx="8"/>
+        <text x="864" y="215" text-anchor="middle">mv -f into place</text>
+        <text class="ts" x="864" y="236" text-anchor="middle">atomic rename</text>
+        <line class="ln" x1="864" y1="188" x2="864" y2="96" marker-end="url(#p7a)"/>
+        <text class="tl" x="872" y="146">then</text>
+        <line class="ln ln-bad" x1="568" y1="221" x2="534" y2="221" marker-end="url(#p7b)"/>
+        <text class="tl" x="551" y="213" text-anchor="middle">fails</text>
+        <rect class="bx bx-bad" x="268" y="188" width="262" height="66" rx="8"/>
+        <text x="399" y="215" text-anchor="middle">tool failed or printed nothing</text>
+        <text class="ts" x="399" y="236" text-anchor="middle">delete the temp, keep the old cache</text>
+        <rect class="bx bx-sys" x="18" y="188" width="206" height="66" rx="8"/>
+        <text class="ts" x="121" y="210" text-anchor="middle">used for 4 tools:</text>
+        <text class="tm ts" x="121" y="228" text-anchor="middle">dircolors · zoxide</text>
+        <text class="tm ts" x="121" y="245" text-anchor="middle">fzf · starship</text>
+      </svg>
+    </div>
+    <figcaption>
+      <p>Each of the four tools costs about 2 ms per shell when run every time. The cache key includes the binary's full path because the generated code embeds it, so a moved binary or a changed flag gets a fresh cache, never a stale one. <code>compinit</code> follows the same idea: the slow security audit runs only when <code>zcompdump</code> is missing or older than 24 hours.</p>
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ═══════════════════════════ PART 3: VIM ═══════════════════════════ -->
+<section class="part" id="vim">
+  <div class="part-head">
+    <span class="pk">Part 3</span>
+    <h2>Vim and the C tools</h2>
+    <p>The Vim order comes from <code>:scriptnames</code>, captured from a real Vim with the real <code>~/.vimrc</code> inside a tmux terminal: 150 scripts by the end of startup, zero messages.</p>
+  </div>
+
+  <figure class="plate" id="p8">
+    <header><span class="pn">Plate 8</span><h3>Vim startup, as traced</h3></header>
+    <div class="trace-head"><span class="chip prog">vim main.c</span> Ubuntu's Vim 9.1, built <code>-clipboard</code> and <code>+clientserver</code>. <code>#n</code> is the position in <code>:scriptnames</code>.</div>
+    <ol class="ct">
+      <li class="ph all"><div class="phl">system vimrc</div>
+        <ul>
+          <li><div class="r"><span class="chip sys">/etc/vim/vimrc</span><span class="lr">#1</span><span class="n">→ <code>debian.vim</code> #2; <code>syntax on</code>, which also turns filetype detection on</span></div>
+            <ul><li><div class="r"><span class="chip sys">filetype.vim</span><span class="lr">#7</span><span class="n">runs every <code>ftdetect/*.vim</code> on the runtime path</span></div>
+              <ul><li><div class="r"><a class="chip repo" href="#f-ftdetect">~/.vim/ftdetect/cpp.vim</a><span class="lr">#8</span><span class="n">dot-less headers under <code>c++/</code> or <code>include/</code> → cpp</span></div></li></ul>
+            </li></ul>
+          </li>
+        </ul>
+      </li>
+      <li class="ph inter"><div class="phl">your vimrc, top to bottom <small><a href="#f-vimrc">~/.vimrc</a> is #12; no plugin is loaded yet</small></div>
+        <ul>
+          <li><div class="r"><span class="q">packadd! editexisting</span><span class="lr">L5</span><span class="n">only added to the runtime path now; sourced later (#90)</span></div></li>
+          <li><div class="r"><span class="q">packadd! editorconfig</span><span class="lr">L7</span><span class="n">the same for <a href="#f-editorconfig">.editorconfig</a> support: its ftdetect file loads at #23, its plugin at #89</span></div></li>
+          <li><div class="r"><span class="chip sys">defaults.vim</span><span class="lr">L9 · #13</span><span class="n">Vim skips it whenever a vimrc exists, so it is sourced by hand</span></div></li>
+          <li><div class="r"><span class="chip sys">ftplugin/man.vim</span><span class="lr">L11 · #17</span><span class="n"><code>:Man</code>, and <code>K</code> on a word</span></div></li>
+          <li><div class="r"><span class="q">options</span><span class="lr">L16–57</span><span class="n">spell + CJK, <code>signcolumn=yes</code>, fuzzy wildmenu, <code>background=dark</code>, truecolor, undo files in <code>~/.vim/undodir</code> (0700)</span></div></li>
+          <li><div class="r"><span class="q">Shift-Tab formatter bridge</span><span class="lr">L64–125</span><span class="n">clang-format, black or <code>=</code> per filetype (<a href="#p11">Plate 11</a>)</span></div></li>
+          <li><div class="r"><span class="q">clipboard</span><span class="lr">L127–173</span><span class="n"><code>"+</code> register, or PowerShell, wl-copy, xclip (<a href="#p12">Plate 12</a>)</span></div></li>
+          <li><div class="r"><span class="q">vim-plug bootstrap</span><span class="lr">L195–200</span><span class="n">no <code>plug.vim</code>? curl it and run <code>PlugInstall</code> at VimEnter</span></div></li>
+          <li><div class="r"><span class="q">plug#begin()</span><span class="lr">L202 · #18–19</span><span class="n">loads vim-plug, then <code>:filetype off</code></span></div></li>
+          <li><div class="r"><span class="q">23 × Plug</span><span class="lr">L203–225</span><span class="n">declares only; nothing loads here</span></div></li>
+          <li><div class="r"><span class="q">plug#end()</span><span class="lr">L226 · #20–23</span><span class="n">23 folders join the runtime path; filetype detection back on (#23 is editorconfig's ftdetect file)</span></div></li>
+          <li><div class="r"><span class="q">plugin settings, keys</span><span class="lr">L228–311</span><span class="n">airline tab line, <code>:RR</code>, <code>:Make</code>, F1–F7, Leader maps (<a href="#p13">Plate 13</a>)</span></div></li>
+          <li><div class="r"><span class="q">LSP config</span><span class="lr">L313–327</span><span class="n">options + clangd, handed over on <code>User LspSetup</code> (<a href="#p9">Plate 9</a>)</span></div></li>
+          <li><div class="r"><span class="q">theme, per-filetype rules</span><span class="lr">L360–384</span><span class="n"><code>au VimEnter * colorscheme gruvbox</code>; indents; F8 only in markdown; <code>q</code> closes lists</span></div></li>
+        </ul>
+      </li>
+      <li class="ph login"><div class="phl">plugin load <small>Vim does this after the vimrc</small></div>
+        <ul>
+          <li><div class="r"><span class="chip sys">~/.vim/plugged/*/plugin/*.vim</span><span class="lr">#24–72</span><span class="n">18 plugins, in Plug order: gitgutter … lsp … airline</span></div>
+            <ul><li><div class="r"><span class="q">lsp/plugin/lsp.vim</span><span class="lr">#65</span><span class="n">too early to start: registers <code>au VimEnter * LspEnable()</code></span></div></li></ul>
+          </li>
+          <li><div class="r"><span class="chip sys">not loaded yet</span><span class="n">markdown-preview (markdown only), undotree (on <code>:UndotreeToggle</code>), vim-repeat (autoload only)</span></div></li>
+          <li><div class="r"><span class="chip sys">$VIMRUNTIME/plugin/*.vim</span><span class="lr">#73–88</span><span class="n">netrw, matchparen, gzip, tar, zip …</span></div></li>
+          <li><div class="r"><span class="chip sys">editorconfig</span><span class="lr">#89</span><span class="n">the deferred <code>packadd!</code> from L7: hooks <code>BufReadPost</code> and <code>BufNewFile</code> for every file</span></div></li>
+          <li><div class="r"><span class="chip sys">editexisting</span><span class="lr">#90</span><span class="n">the deferred <code>packadd!</code> from L5</span></div></li>
+        </ul>
+      </li>
+      <li class="ph human"><div class="phl">files and windows <small>before VimEnter</small></div>
+        <ul>
+          <li><div class="r"><span class="q">main.c is read</span><span class="n">filetype c → c ftplugin and indent → your rules: 4 spaces, <code>cinoptions</code>, Shift-Tab mapping; then the project's <code>.editorconfig</code>, if any, overrides the indent (its autocommand was defined later, so it runs later)</span></div></li>
+          <li><div class="r"><span class="q">airline, gitgutter</span><span class="lr">#91–115</span><span class="n">set themselves up as the first window appears</span></div></li>
+        </ul>
+      </li>
+      <li class="ph vimenter"><div class="phl">VimEnter <small>autocommands run in the order they were defined</small></div>
+        <ul>
+          <li><div class="r"><span class="q">colorscheme gruvbox</span><span class="lr">#117</span><span class="n">yours, defined first, so it runs first</span></div></li>
+          <li><div class="r"><span class="q">LspEnable()</span><span class="lr">#118–140</span><span class="n">fires <code>User LspSetup</code> → your <code>LspOptionsSet()</code> and <code>LspAddServer(clangd)</code> → <code>AddFile()</code> for every open buffer, so main.c gets clangd</span></div></li>
+        </ul>
+      </li>
+    </ol>
+    <figcaption><p>Re-traced 2026-10-21 after <code>packadd! editorconfig</code> was added: two more scripts (#23, #89). Position #116 in the raw trace was the probe script itself, which is why the count above is 150, not 151. The trace ran without a file; the “main.c is read” row follows Vim's documented order (<code>:help startup</code>) and the plugin's source, which loops over every buffer that is already open.</p></figcaption>
+    <p class="trap"><span class="tt">Beginner trap</span>Your vimrc runs before any plugin exists, so it cannot call <code>LspAddServer()</code> directly. It leaves a callback (<code>au User LspSetup</code>), and the plugin calls back at VimEnter. Second trap: having a vimrc turns Vim's <code>defaults.vim</code> <em>off</em>; line 9 turns it back on.</p>
+  </figure>
+
+  <figure class="plate" id="p9">
+    <header><span class="pn">Plate 9</span><h3>The LSP handshake: vimrc, Vim, yegappan/lsp, clangd</h3></header>
+    <div class="scroll">
+      <svg class="svgd" viewBox="0 0 1000 530" role="img" aria-label="Sequence diagram. 1: while the vimrc runs, it registers an autocommand for User LspSetup. 2: at VimEnter, Vim calls LspEnable in the plugin. 3: the plugin fires User LspSetup. 4: the vimrc's callback passes the options and the clangd server. 5: the plugin starts clangd with pipes. 6: clangd reads its user config, the project's .clangd and the compilation database. 7 to 9: initialize, didOpen with the whole file, publishDiagnostics. 10: the plugin draws signs and virtual text. 11 and 12: every edit sends didChange and new diagnostics come back in about 0.1 seconds.">
+        <defs>
+          <marker id="p9a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="p9r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-repo" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <rect class="bx bx-repo" x="70" y="14" width="120" height="36" rx="7"/>
+        <text class="tm tb" x="130" y="37" text-anchor="middle">~/.vimrc</text>
+        <rect class="bx bx-prog" x="250" y="14" width="120" height="36" rx="7"/>
+        <text class="tb" x="310" y="37" text-anchor="middle">Vim 9.1</text>
+        <rect class="bx bx-prog" x="430" y="14" width="140" height="36" rx="7"/>
+        <text class="tb" x="500" y="37" text-anchor="middle">yegappan/lsp</text>
+        <rect class="bx bx-prog" x="630" y="14" width="120" height="36" rx="7"/>
+        <text class="tb" x="690" y="37" text-anchor="middle">clangd 21</text>
+        <line class="life" x1="130" y1="50" x2="130" y2="520"/>
+        <line class="life" x1="310" y1="50" x2="310" y2="520"/>
+        <line class="life" x1="500" y1="50" x2="500" y2="520"/>
+        <line class="life" x1="690" y1="50" x2="690" y2="520"/>
+
+        <text class="band" x="10" y="88">STARTUP</text>
+        <line class="ln ln-repo" x1="130" y1="84" x2="306" y2="84" marker-end="url(#p9r)"/>
+        <text class="tl" x="220" y="77" text-anchor="middle">1 · au User LspSetup …</text>
+
+        <text class="band" x="10" y="132">VIMENTER</text>
+        <line class="ln" x1="310" y1="128" x2="496" y2="128" marker-end="url(#p9a)"/>
+        <text class="tl" x="405" y="121" text-anchor="middle">2 · LspEnable()</text>
+        <line class="ln" x1="500" y1="164" x2="134" y2="164" marker-end="url(#p9a)"/>
+        <text class="tl" x="315" y="157" text-anchor="middle">3 · doautocmd User LspSetup</text>
+        <line class="ln ln-repo" x1="130" y1="198" x2="496" y2="198" marker-end="url(#p9r)"/>
+        <text class="tl" x="315" y="191" text-anchor="middle">4 · LspOptionsSet() + LspAddServer(clangd)</text>
+        <line class="ln" x1="500" y1="238" x2="686" y2="238" marker-end="url(#p9a)"/>
+        <text class="tl" x="595" y="231" text-anchor="middle">5 · start clangd (pipes)</text>
+        <line class="ln" x1="690" y1="274" x2="786" y2="274" marker-end="url(#p9a)"/>
+        <rect class="bx" x="790" y="232" width="204" height="110" rx="8"/>
+        <text class="tb" x="800" y="253">6 · clangd reads</text>
+        <text class="tm ts c-repo" x="800" y="274">~/.config/clangd/config.yaml</text>
+        <text class="tm ts" x="800" y="293">&lt;project&gt;/.clangd (on top)</text>
+        <text class="tm ts" x="800" y="312">compile_commands.json</text>
+        <text class="tm ts" x="800" y="330">or compile_flags.txt</text>
+
+        <text class="band" x="10" y="318">C FILE</text>
+        <text class="band" x="10" y="332">OPENS</text>
+        <line class="ln" x1="500" y1="316" x2="686" y2="316" marker-end="url(#p9a)"/>
+        <text class="tl" x="595" y="309" text-anchor="middle">7 · initialize → initialized</text>
+        <line class="ln" x1="500" y1="352" x2="686" y2="352" marker-end="url(#p9a)"/>
+        <text class="tl" x="595" y="345" text-anchor="middle">8 · didOpen: the whole file</text>
+        <line class="ln ln-d" x1="690" y1="388" x2="504" y2="388" marker-end="url(#p9a)"/>
+        <text class="tl" x="595" y="381" text-anchor="middle">9 · publishDiagnostics</text>
+        <line class="ln" x1="500" y1="424" x2="314" y2="424" marker-end="url(#p9a)"/>
+        <text class="tl" x="405" y="417" text-anchor="middle">10 · signs, virtual text</text>
+
+        <text class="band" x="10" y="470">TYPING</text>
+        <line class="ln" x1="500" y1="466" x2="686" y2="466" marker-end="url(#p9a)"/>
+        <text class="tl" x="595" y="459" text-anchor="middle">11 · didChange (each edit)</text>
+        <line class="ln ln-d" x1="690" y1="502" x2="504" y2="502" marker-end="url(#p9a)"/>
+        <text class="tl" x="595" y="495" text-anchor="middle">12 · new diagnostics, ≈0.1 s</text>
+      </svg>
+    </div>
+    <figcaption>
+      <p>Solid arrows are calls and requests; dashed arrows are what clangd pushes back. Messages 7–12 are plain JSON over clangd's stdin and stdout, each framed by a <code>Content-Length</code> header. <a href="#f-lsp-probe"><code>scripts/lsp-probe.py</code></a> plays the plugin's part by hand (7, 8, then waits for 9, then <code>shutdown</code> and <code>exit</code>), which is how <code>test.sh</code> proves that clang-tidy really runs inside clangd.</p>
+    </figcaption>
+  </figure>
+
+  <figure class="plate" id="p10">
+    <header><span class="pn">Plate 10</span><h3>Where clangd and clang-format look</h3></header>
+    <div class="scroll">
+      <svg class="svgd" viewBox="0 0 960 372" role="img" aria-label="A home folder with .clang-format and .config/clangd/config.yaml from the repo, and two example projects. In os-workbench, a .clangd copied from templates and a compile_commands.json made by bear sit at the root; the edited file is amgame/src/game.c. Both tools walk up from the edited file: clang-format takes the nearest .clang-format, which is ~/.clang-format; clangd takes the nearest compile_commands.json or compile_flags.txt and merges .clangd on top of the user config. In algo, compile_flags.txt from templates gives every single-file program the same flags; without it clangd guesses and reports false errors.">
+        <defs>
+          <marker id="p10a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-cond" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <text class="tm tb" x="24" y="36">~</text>
+        <text class="ts" x="40" y="36">= /home/ken</text>
+        <line class="tick" x1="30" y1="44" x2="30" y2="270"/>
+        <line class="tick" x1="30" y1="62" x2="44" y2="62"/>
+        <text class="tm c-repo" x="48" y="66">.clang-format</text>
+        <line class="tick" x1="30" y1="94" x2="44" y2="94"/>
+        <text class="tm c-repo" x="48" y="98">.config/clangd/config.yaml</text>
+        <line class="tick" x1="30" y1="126" x2="44" y2="126"/>
+        <text class="tm" x="48" y="130">os-workbench/</text>
+        <line class="tick" x1="54" y1="138" x2="54" y2="222"/>
+        <line class="tick" x1="54" y1="158" x2="68" y2="158"/>
+        <text class="tm" x="72" y="162">.clangd</text>
+        <line class="tick" x1="54" y1="190" x2="68" y2="190"/>
+        <text class="tm c-cache" x="72" y="194">compile_commands.json</text>
+        <line class="tick" x1="54" y1="222" x2="68" y2="222"/>
+        <rect class="hl" x="70" y="209" width="148" height="22" rx="4"/>
+        <text class="tm tb" x="74" y="226">amgame/src/game.c</text>
+        <line class="tick" x1="30" y1="266" x2="44" y2="266"/>
+        <text class="tm" x="48" y="270">algo/</text>
+        <line class="tick" x1="54" y1="278" x2="54" y2="330"/>
+        <line class="tick" x1="54" y1="298" x2="68" y2="298"/>
+        <text class="tm" x="72" y="302">compile_flags.txt</text>
+        <line class="tick" x1="54" y1="330" x2="68" y2="330"/>
+        <text class="tm" x="72" y="334">two_sum.cpp</text>
+
+        <text class="ts" x="300" y="66">fallback style for every file under ~</text>
+        <text class="ts" x="300" y="98">clangd settings for every project</text>
+        <text class="ts" x="300" y="162">copied from templates/abstract-machine/</text>
+        <text class="ts" x="300" y="194">made by: bear -- make -B</text>
+        <text class="ts c-cond tb" x="300" y="226">← the file you are editing</text>
+        <text class="ts" x="300" y="302">copied from templates/cpp-practice/</text>
+
+        <line class="ln ln-d ln-cond" x1="575" y1="224" x2="575" y2="58" marker-end="url(#p10a)"/>
+        <text class="tl" x="567" y="146" text-anchor="end">walks up</text>
+        <circle class="dot" cx="575" cy="192" r="4"/>
+        <circle class="dot" cx="575" cy="64" r="4"/>
+        <line class="tick" x1="579" y1="192" x2="608" y2="192"/>
+        <line class="tick" x1="579" y1="64" x2="608" y2="64"/>
+
+        <rect class="bx bx-prog" x="610" y="26" width="332" height="96" rx="8"/>
+        <text class="tb" x="626" y="48">clang-format (Shift-Tab)</text>
+        <text class="ts" x="626" y="68">walks up from the file; the nearest</text>
+        <text class="ts" x="626" y="86">.clang-format wins: here ~/.clang-format.</text>
+        <text class="ts" x="626" y="104">None at all: the built-in LLVM style.</text>
+        <rect class="bx bx-prog" x="610" y="138" width="332" height="108" rx="8"/>
+        <text class="tb" x="626" y="160">clangd</text>
+        <text class="ts" x="626" y="180">flags: the nearest compile_commands.json</text>
+        <text class="ts" x="626" y="198">(or compile_flags.txt) going up.</text>
+        <text class="ts" x="626" y="216">settings: config.yaml, then the project's</text>
+        <text class="ts" x="626" y="234">.clangd merged on top of it.</text>
+        <rect class="bx bx-bad" x="610" y="262" width="332" height="84" rx="8"/>
+        <text class="tb" x="626" y="284">no flags file found?</text>
+        <text class="ts" x="626" y="304">clangd guesses: no -I paths, default -std.</text>
+        <text class="ts" x="626" y="322">Measured in ~/algo: 157 and 461 false</text>
+        <text class="ts" x="626" y="339">errors in two files, 0 with the template.</text>
+      </svg>
+    </div>
+    <figcaption>
+      <p>The project layout is the example from <a href="#f-tpl-readme"><code>templates/README.md</code></a>. Nothing under <code>templates/</code> is installed: you copy a template into a project root, because both tools search from the edited file upward. The user config <code>~/.config/clangd/config.yaml</code> is the exception: clangd always reads it, wherever the file is.</p>
+    </figcaption>
+    <p class="trap"><span class="tt">Beginner trap</span>Without a flags file, clangd does not stay quiet; it reports errors that do not exist, because it compiled your file with the wrong flags. Red marks in the editor are only as good as <code>compile_commands.json</code>.</p>
+  </figure>
+
+  <figure class="plate" id="p11">
+    <header><span class="pn">Plate 11</span><h3>Shift-Tab: the formatter bridge and its guard</h3></header>
+    <div class="scroll">
+      <svg class="svgd" viewBox="0 0 960 214" role="img" aria-label="Shift-Tab in a C buffer saves the view and filters the whole buffer through clang-format with the file's real path. If clang-format exits 0, the buffer is formatted and the view restored. If it fails, the buffer now holds the error text, so s:FilterFailed undoes the change, shows clang-format failed with the exit code, and restores the view. Python uses black and assembly uses Vim's = with s:AsmIndent.">
+        <defs>
+          <marker id="p11a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="p11b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-bad" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <rect class="bx" x="18" y="26" width="150" height="60" rx="8"/>
+        <text class="tb" x="93" y="51" text-anchor="middle">Shift-Tab</text>
+        <text class="ts" x="93" y="71" text-anchor="middle">a C or C++ buffer</text>
+        <line class="ln" x1="170" y1="56" x2="198" y2="56" marker-end="url(#p11a)"/>
+        <rect class="bx" x="202" y="26" width="166" height="60" rx="8"/>
+        <text x="285" y="51" text-anchor="middle">save the view</text>
+        <text class="tm ts" x="285" y="71" text-anchor="middle">winsaveview()</text>
+        <line class="ln" x1="370" y1="56" x2="398" y2="56" marker-end="url(#p11a)"/>
+        <rect class="bx bx-prog" x="402" y="26" width="252" height="60" rx="8"/>
+        <text class="tm tb" x="528" y="51" text-anchor="middle">%!clang-format</text>
+        <text class="tm ts" x="528" y="71" text-anchor="middle">--assume-filename=main.c</text>
+        <line class="ln" x1="656" y1="56" x2="684" y2="56" marker-end="url(#p11a)"/>
+        <rect class="bx bx-cond" x="688" y="26" width="96" height="60" rx="8"/>
+        <text x="736" y="61" text-anchor="middle">exit 0?</text>
+        <line class="ln ln-ok" x1="786" y1="56" x2="814" y2="56" marker-end="url(#p11a)"/>
+        <text class="tl" x="800" y="47" text-anchor="middle">yes</text>
+        <rect class="bx bx-ok" x="818" y="26" width="124" height="60" rx="8"/>
+        <text x="880" y="51" text-anchor="middle">formatted</text>
+        <text class="ts" x="880" y="71" text-anchor="middle">view restored</text>
+
+        <line class="ln ln-bad" x1="736" y1="86" x2="736" y2="132" marker-end="url(#p11b)"/>
+        <text class="tl" x="746" y="113">no</text>
+        <rect class="bx bx-bad" x="586" y="136" width="300" height="60" rx="8"/>
+        <text x="736" y="161" text-anchor="middle">the buffer now holds the error text</text>
+        <text class="ts" x="736" y="181" text-anchor="middle">one :w later, the source file would be gone</text>
+        <line class="ln" x1="584" y1="166" x2="546" y2="166" marker-end="url(#p11a)"/>
+        <text class="tl" x="565" y="158" text-anchor="middle">undo</text>
+        <rect class="bx bx-ok" x="230" y="136" width="312" height="60" rx="8"/>
+        <text x="386" y="161" text-anchor="middle">undone, view restored, and a message:</text>
+        <text class="tm ts" x="386" y="181" text-anchor="middle">clang-format failed (exit 1): …</text>
+        <rect class="bx bx-sys" x="18" y="136" width="196" height="64" rx="8"/>
+        <text class="ts" x="116" y="156" text-anchor="middle">same bridge for</text>
+        <text class="tm ts" x="116" y="174" text-anchor="middle">python → black</text>
+        <text class="tm ts" x="116" y="191" text-anchor="middle">asm → = (AsmIndent)</text>
+      </svg>
+    </div>
+    <figcaption><p><code>--assume-filename</code> passes the real path, so clang-format finds the right <code>.clang-format</code> (<a href="#p10">Plate 10</a>) even though it reads the text from a pipe. In visual mode, Shift-Tab formats only the selected lines. <code>test.sh</code> proves the guard with a fake clang-format that exits 1: the buffer must come back unchanged.</p></figcaption>
+  </figure>
+
+  <figure class="plate" id="p12">
+    <header><span class="pn">Plate 12</span><h3>Which clipboard <code>\y</code> and <code>\p</code> use</h3></header>
+    <div class="scroll">
+      <svg class="svgd" viewBox="0 0 960 372" role="img" aria-label="When you press backslash y or backslash p, the vimrc checks four things in order. Vim built with clipboard support: use the plus register. Otherwise, WSLENV set: use powershell.exe Set-Clipboard and Get-Clipboard, which is this machine. Otherwise WAYLAND_DISPLAY: wl-copy and wl-paste. Otherwise DISPLAY: xclip. Otherwise no mapping is defined.">
+        <defs>
+          <marker id="p12a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <rect class="bx" x="18" y="34" width="150" height="44" rx="8"/>
+        <text class="tm tb" x="93" y="61" text-anchor="middle">\y  or  \p</text>
+        <line class="ln" x1="170" y1="56" x2="210" y2="56" marker-end="url(#p12a)"/>
+        <rect class="bx bx-cond" x="214" y="34" width="250" height="44" rx="8"/>
+        <text x="339" y="61" text-anchor="middle">Vim built with +clipboard?</text>
+        <line class="ln" x1="466" y1="56" x2="516" y2="56" marker-end="url(#p12a)"/>
+        <text class="tl" x="491" y="48" text-anchor="middle">yes</text>
+        <rect class="bx" x="520" y="34" width="422" height="44" rx="8"/>
+        <text x="731" y="61" text-anchor="middle">the "+ register: Vim talks to the clipboard itself</text>
+
+        <line class="ln" x1="339" y1="78" x2="339" y2="102" marker-end="url(#p12a)"/>
+        <text class="tl" x="347" y="94">no</text>
+        <rect class="bx bx-cond" x="214" y="106" width="250" height="44" rx="8"/>
+        <text class="tm" x="339" y="133" text-anchor="middle">$WSLENV set?</text>
+        <line class="ln" x1="466" y1="128" x2="516" y2="128" marker-end="url(#p12a)"/>
+        <text class="tl" x="491" y="120" text-anchor="middle">yes</text>
+        <rect class="bx bx-ok strong" x="520" y="98" width="422" height="60" rx="8"/>
+        <text class="tm" x="731" y="122" text-anchor="middle">powershell.exe Set-Clipboard / Get-Clipboard</text>
+        <text class="ts" x="731" y="143" text-anchor="middle">this machine: Vim is -clipboard and runs in WSL; UTF-8 safe</text>
+
+        <line class="ln" x1="339" y1="150" x2="339" y2="186" marker-end="url(#p12a)"/>
+        <text class="tl" x="347" y="172">no</text>
+        <rect class="bx bx-cond" x="214" y="190" width="250" height="44" rx="8"/>
+        <text class="tm" x="339" y="217" text-anchor="middle">$WAYLAND_DISPLAY set?</text>
+        <line class="ln" x1="466" y1="212" x2="516" y2="212" marker-end="url(#p12a)"/>
+        <text class="tl" x="491" y="204" text-anchor="middle">yes</text>
+        <rect class="bx" x="520" y="190" width="422" height="44" rx="8"/>
+        <text class="tm" x="731" y="217" text-anchor="middle">wl-copy  /  wl-paste -n</text>
+
+        <line class="ln" x1="339" y1="234" x2="339" y2="258" marker-end="url(#p12a)"/>
+        <text class="tl" x="347" y="250">no</text>
+        <rect class="bx bx-cond" x="214" y="262" width="250" height="44" rx="8"/>
+        <text class="tm" x="339" y="289" text-anchor="middle">$DISPLAY set? (X11)</text>
+        <line class="ln" x1="466" y1="284" x2="516" y2="284" marker-end="url(#p12a)"/>
+        <text class="tl" x="491" y="276" text-anchor="middle">yes</text>
+        <rect class="bx" x="520" y="262" width="422" height="44" rx="8"/>
+        <text class="tm" x="731" y="289" text-anchor="middle">xclip -selection clipboard  [-o]</text>
+
+        <line class="ln" x1="339" y1="306" x2="339" y2="324" marker-end="url(#p12a)"/>
+        <text class="tl" x="347" y="319">no</text>
+        <rect class="bx bx-sys" x="214" y="328" width="250" height="34" rx="8"/>
+        <text class="ts" x="339" y="350" text-anchor="middle">none: no \y \p mappings at all</text>
+      </svg>
+    </div>
+    <figcaption><p>Verified on this machine: <code>has('clipboard')</code> is 0 and <code>$WSLENV</code> is set, so the PowerShell route is live. PowerShell replaced <code>clip.exe</code>, which turned a lone CJK character (U+4E2D) into “-N”. The keys call script-local functions through <code>&lt;SID&gt;</code> because a mapping cannot read <code>s:</code> variables when you press it (the old E121 bug).</p></figcaption>
+  </figure>
+
+  <figure class="plate" id="p13">
+    <header><span class="pn">Plate 13</span><h3>The keys the vimrc adds</h3></header>
+    <div class="frow">
+      <div class="key"><kbd>F1</kbd><span>file tree (NERDTree)</span></div>
+      <div class="key"><kbd>F2</kbd><span>recent files (fzf)</span></div>
+      <div class="key"><kbd>F3</kbd><span>outline (Tagbar)</span></div>
+      <div class="key"><kbd>F4</kbd><span>error list; again closes</span></div>
+      <div class="key"><kbd>F5</kbd><span>build with <code>:Make</code>; again stops or closes</span></div>
+      <div class="key"><kbd>F6</kbd><span>undo tree</span></div>
+      <div class="key"><kbd>F7</kbd><span>calendar</span></div>
+      <div class="key"><kbd>F8</kbd><span>markdown preview, markdown buffers only</span></div>
+    </div>
+    <div class="kgroups">
+      <div class="kg">
+        <h4>Leader keys (Leader is <code>\</code>)</h4>
+        <ul>
+          <li><kbd>\f</kbd> files · <kbd>\b</kbd> buffers · <kbd>\g</kbd> ripgrep · <kbd>\/</kbd> lines in this buffer</li>
+          <li><kbd>\y</kbd> copy · <kbd>\p</kbd> paste, through the system clipboard (<a href="#p12">Plate 12</a>)</li>
+          <li><kbd>\1</kbd>…<kbd>\0</kbd> jump to a tab · <kbd>\-</kbd> <kbd>\+</kbd> previous and next tab</li>
+          <li><kbd>\jd</kbd> definition · <kbd>\jh</kbd> declaration · <kbd>\jr</kbd> references · <kbd>\ji</kbd> code action · <kbd>\K</kbd> hover</li>
+        </ul>
+      </div>
+      <div class="kg">
+        <h4>Other keys and commands</h4>
+        <ul>
+          <li><kbd>]d</kbd> <kbd>[d</kbd> next and previous error · <kbd>Shift-Tab</kbd> format (<a href="#p11">Plate 11</a>)</li>
+          <li><kbd>Esc</kbd> clears the search highlight · <kbd>Esc</kbd><kbd>Esc</kbd> leaves terminal mode</li>
+          <li><kbd>q</kbd> closes help, man and list windows · <kbd>Q</kbd> does nothing (Ex mode disabled)</li>
+          <li><code>:RR name</code> rename · <code>:Make</code> async build · <code>:Grep pat</code> async ripgrep · <code>K</code> man page</li>
+        </ul>
+      </div>
+    </div>
+    <figcaption><p>F8 is mapped per markdown buffer on purpose: the preview plugin only loads for markdown, so a global F8 used to fail with E492 everywhere else. <code>test.sh</code> checks that F8 exists only there.</p></figcaption>
+  </figure>
+</section>
+
+<!-- ═══════════════════════════ PART 4: TOOLS ═══════════════════════════ -->
+<section class="part" id="tools">
+  <div class="part-head">
+    <span class="pk">Part 4</span>
+    <h2>tmux, git, gdb and the prompt</h2>
+    <p>Four programs, three different rules for which file wins. Each plate names its rule.</p>
+  </div>
+
+  <figure class="plate" id="p14">
+    <header><span class="pn">Plate 14</span><h3>tmux: one config read, many login shells</h3></header>
+    <div class="scroll">
+      <svg class="svgd" viewBox="0 0 960 296" role="img" aria-label="Windows Terminal sends keys to the tmux client, which talks to the tmux server over a socket. The server reads ~/.config/tmux/tmux.conf once when it starts. Each pane starts a login zsh, so the whole shell startup runs again; a pane running Vim gets Esc after 10 ms and focus events. Copy mode's y sends the text through the terminal with OSC 52 to the system clipboard.">
+        <defs>
+          <marker id="p14a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <rect class="bx" x="18" y="40" width="196" height="72" rx="8"/>
+        <text class="tb" x="116" y="64" text-anchor="middle">Windows Terminal</text>
+        <text class="tm ts" x="116" y="84" text-anchor="middle">TERM=xterm-256color</text>
+        <text class="ts" x="116" y="101" text-anchor="middle">24-bit colour</text>
+        <line class="ln" x1="216" y1="76" x2="254" y2="76" marker-end="url(#p14a)"/>
+        <text class="tl" x="235" y="68" text-anchor="middle">keys</text>
+        <rect class="bx bx-prog" x="258" y="48" width="130" height="56" rx="8"/>
+        <text class="tb" x="323" y="72" text-anchor="middle">tmux client</text>
+        <text class="ts" x="323" y="91" text-anchor="middle">attach, detach</text>
+        <line class="ln" x1="390" y1="76" x2="434" y2="76" marker-end="url(#p14a)"/>
+        <text class="tl" x="412" y="68" text-anchor="middle">socket</text>
+        <rect class="bx bx-prog" x="438" y="16" width="504" height="264" rx="10"/>
+        <text class="tb" x="454" y="40">tmux server, one per socket</text>
+        <text class="tm ts c-repo" x="454" y="58">reads ~/.config/tmux/tmux.conf once, when it starts</text>
+        <rect class="bx" x="454" y="74" width="228" height="92" rx="8"/>
+        <text class="tb" x="568" y="98" text-anchor="middle">pane 1: -zsh</text>
+        <text class="ts" x="568" y="117" text-anchor="middle">a login shell: Plate 3 runs</text>
+        <text class="ts" x="568" y="134" text-anchor="middle">again, .profile included</text>
+        <text class="tm ts" x="568" y="153" text-anchor="middle">TERM=tmux-256color</text>
+        <rect class="bx" x="698" y="74" width="228" height="92" rx="8"/>
+        <text class="tb" x="812" y="98" text-anchor="middle">pane 2: vim</text>
+        <text class="ts" x="812" y="117" text-anchor="middle">Esc arrives after 10 ms,</text>
+        <text class="ts" x="812" y="134" text-anchor="middle">not the default 500 ms</text>
+        <text class="ts" x="812" y="153" text-anchor="middle">focus events → autoread</text>
+        <rect class="bx" x="454" y="180" width="472" height="40" rx="8"/>
+        <text class="ts" x="690" y="205" text-anchor="middle">prefix " / % / c: split or new window in the current pane's folder</text>
+        <text class="ts" x="454" y="250">prefix r: reload · mouse on · h j k l: move between panes</text>
+        <path class="ln ln-d" d="M438,268 H116 V116" marker-end="url(#p14a)"/>
+        <text class="tl" x="277" y="262" text-anchor="middle">copy-mode y: OSC 52 → system clipboard</text>
+      </svg>
+    </div>
+    <figcaption><p>Verified with a fresh server and no <code>-f</code> flag: tmux 3.6 found <code>~/.config/tmux/tmux.conf</code> by itself (<code>escape-time</code> 10, <code>mouse</code> on, <code>base-index</code> 1), and the first pane's process was <code>-zsh</code>.</p></figcaption>
+    <p class="trap"><span class="tt">Beginner trap</span>Saving <code>tmux.conf</code> changes nothing in a running tmux. The server read the file once; press <code>prefix r</code> or start a new server.</p>
+  </figure>
+
+  <figure class="plate" id="p15">
+    <header><span class="pn">Plate 15</span><h3>git: layers, and the later one wins</h3></header>
+    <div class="cols2">
+      <div>
+        <div class="order"><span>read first</span><span>counted today</span></div>
+        <div class="stack">
+          <div class="layer ghost"><span class="no">1</span><div class="what"><code>/etc/gitconfig</code><small>system-wide; none on this machine</small></div><span class="cnt">0 keys</span></div>
+          <div class="layer repo"><span class="no">2</span><div class="what"><a href="#f-gitconfig"><code>~/.config/git/config</code></a><small>the repo's defaults; ends with <code>[include] ~/.config/git/config.local</code> (absent)</small></div><span class="cnt">20 keys</span></div>
+          <div class="layer"><span class="no">3</span><div class="what"><code>~/.gitconfig</code><small>your identity, user.name and user.email; never committed</small></div><span class="cnt">2 keys</span></div>
+          <div class="layer"><span class="no">4</span><div class="what"><code>.git/config</code><small>this repository: remote and branch</small></div><span class="cnt">8 keys</span></div>
+          <div class="layer ghost"><span class="no">5</span><div class="what"><code>git -c key=value …</code><small>one command only</small></div><span class="cnt">—</span></div>
+        </div>
+        <div class="order" style="margin-top:6px"><span></span><span>read last, wins</span></div>
+      </div>
+      <div>
+        <h4>What layer 2 sets</h4>
+        <ul class="plain">
+          <li><code>pull.ff=only</code>: a plain pull never invents a merge</li>
+          <li><code>merge.conflictStyle=zdiff3</code>: conflicts show the common ancestor</li>
+          <li><code>diff.algorithm=histogram</code>, <code>colorMoved</code></li>
+          <li><code>rerere</code>, <code>fetch.prune</code>, <code>push.autoSetupRemote</code></li>
+          <li>aliases <code>st</code> <code>lg</code> <code>last</code> <code>unstage</code> <code>amend</code></li>
+        </ul>
+        <h4 style="margin-top:12px">Ignore files, all applied</h4>
+        <ul class="plain">
+          <li><a href="#f-gitignore-global"><code>~/.config/git/ignore</code></a>: every repo (swap files, <code>compile_commands.json</code>)</li>
+          <li><code>.gitignore</code> in the repo · <code>.git/info/exclude</code></li>
+        </ul>
+      </div>
+    </div>
+    <figcaption><p>Counts from <code>git config --list --show-origin --name-only</code> in this repo. <code>git check-ignore -v home/.vimrc.swp</code> answers <code>~/.config/git/ignore:8:*.swp</code>, so the global ignore file is live.</p></figcaption>
+    <p class="trap"><span class="tt">Beginner trap</span><code>git config --global</code> writes <code>~/.gitconfig</code> here, not the repo's file, because <code>~/.gitconfig</code> exists. To change a shared default, edit <code>home/.config/git/config</code> and commit it.</p>
+  </figure>
+
+  <figure class="plate" id="p16">
+    <header><span class="pn">Plate 16</span><h3>gdb and readline: the first file wins</h3></header>
+    <div class="scroll">
+      <svg class="svgd" viewBox="0 0 960 210" role="img" aria-label="gdb starts and checks whether ~/.config/gdb/gdbinit exists. If it does, gdb reads it and ignores ~/.gdbinit entirely. The file sets history, pretty printing, no pager and no confirmation, and turns debuginfod on; the debuginfod server list comes from DEBUGINFOD_URLS, exported at login by /etc/profile.d/debuginfod.sh. A project's own .gdbinit runs only if its path is on the safe-path list, here ~/xv6-riscv/.gdbinit.">
+        <defs>
+          <marker id="p16a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="p16b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-bad" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <rect class="bx" x="18" y="26" width="140" height="56" rx="8"/>
+        <text class="tm tb" x="88" y="59" text-anchor="middle">gdb ./a.out</text>
+        <line class="ln" x1="160" y1="54" x2="194" y2="54" marker-end="url(#p16a)"/>
+        <rect class="bx bx-cond" x="198" y="26" width="250" height="56" rx="8"/>
+        <text class="tm" x="323" y="50" text-anchor="middle">~/.config/gdb/gdbinit</text>
+        <text x="323" y="70" text-anchor="middle">exists?</text>
+        <line class="ln ln-ok" x1="450" y1="54" x2="484" y2="54" marker-end="url(#p16a)"/>
+        <text class="tl" x="467" y="46" text-anchor="middle">yes</text>
+        <rect class="bx bx-repo" x="488" y="26" width="262" height="56" rx="8"/>
+        <text class="tb" x="619" y="50" text-anchor="middle">read it, and only it</text>
+        <text class="ts" x="619" y="70" text-anchor="middle">history, pretty print, no pager</text>
+        <line class="ln" x1="752" y1="54" x2="786" y2="54" marker-end="url(#p16a)"/>
+        <rect class="bx" x="790" y="26" width="152" height="56" rx="8"/>
+        <text x="866" y="50" text-anchor="middle">debuginfod on</text>
+        <text class="tm ts" x="866" y="70" text-anchor="middle">$DEBUGINFOD_URLS</text>
+        <rect class="bx bx-sys" x="790" y="126" width="152" height="56" rx="8"/>
+        <text class="tm ts" x="866" y="150" text-anchor="middle">/etc/profile.d/</text>
+        <text class="tm ts" x="866" y="168" text-anchor="middle">debuginfod.sh</text>
+        <line class="ln ln-d" x1="866" y1="126" x2="866" y2="86" marker-end="url(#p16a)"/>
+        <text class="tl" x="874" y="110">exports</text>
+
+        <line class="ln ln-bad" x1="323" y1="82" x2="323" y2="122" marker-end="url(#p16b)"/>
+        <text class="tl" x="331" y="106">skips</text>
+        <rect class="bx bx-bad" x="198" y="126" width="250" height="56" rx="8"/>
+        <text class="tm" x="323" y="150" text-anchor="middle">~/.gdbinit</text>
+        <text class="ts" x="323" y="169" text-anchor="middle">ignored when the file above exists</text>
+        <line class="ln" x1="619" y1="82" x2="619" y2="122" marker-end="url(#p16a)"/>
+        <text class="tl" x="627" y="106">then</text>
+        <rect class="bx" x="488" y="126" width="262" height="70" rx="8"/>
+        <text x="619" y="148" text-anchor="middle">a project's ./.gdbinit runs</text>
+        <text class="ts" x="619" y="166" text-anchor="middle">only if on the safe-path list:</text>
+        <text class="tm ts c-repo" x="619" y="184" text-anchor="middle">~/xv6-riscv/.gdbinit</text>
+      </svg>
+    </div>
+    <ul class="flow" aria-label="Which programs read ~/.inputrc">
+      <li><a class="chip repo" href="#f-inputrc">~/.inputrc</a></li>
+      <li class="arrow">read by every readline program →</li>
+      <li class="k">bash</li><li class="k">gdb</li><li class="k">python3</li><li class="k">sqlite3</li>
+      <li class="b">not zsh: its line editor is ZLE, keys live in <code>.zshrc</code></li>
+    </ul>
+    <figcaption><p>Verified: <code>gdb -batch -ex 'show confirm'</code> answers “off” and history goes to <code>~/.gdb_history</code>, so gdb 17.1 reads the XDG file. Inside gdb, Up arrow and Tab come from readline, which is why <code>.inputrc</code>'s prefix search works there too.</p></figcaption>
+    <p class="trap"><span class="tt">Beginner trap</span>gdb does not merge <code>~/.config/gdb/gdbinit</code> and <code>~/.gdbinit</code>. It reads the first one that exists and silently ignores the other, so an old <code>~/.gdbinit</code> on the laptop does nothing until it is deleted.</p>
+  </figure>
+
+  <figure class="plate" id="p17">
+    <header><span class="pn">Plate 17</span><h3>The prompt, piece by piece</h3></header>
+    <div class="prompt" role="img" aria-label="Starship prompt captured in ~/config_files: first line, a green corner, an amber ribbon, config_files in cyan, main in purple, renamed modified untracked and one commit behind in red, 3s in yellow; second line, a green corner and a green arrow.">
+      <div><span class="g">╭─</span><span class="am"><svg class="ribbon" viewBox="0 0 16 18" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M8 1C4.4 1 3.2 4.6 5 7.6L1 16.4l3-.8 1.2 2.4L8 11.3l2.8 6.7 1.2-2.4 3 .8-4-8.8C12.8 4.6 11.6 1 8 1zm0 2.6c1.5 0 2 1.7 1.3 3.1L8 9 6.7 6.7C6 5.3 6.5 3.6 8 3.6z"/></svg></span>  <span class="cy">config_files</span>  <span class="pu">main</span> <span class="rd">»!?⇣1</span>  <span class="ye">3s</span></div>
+      <div><span class="g">╰─❯</span> <span class="cur"></span></div>
+    </div>
+    <dl class="anat">
+      <div><dt>╭─ ╰─</dt><dd><code>format</code>, bold green: the two-line frame</dd></div>
+      <div><dt>ribbon</dt><dd><code>[os]</code>: U+EDA5 from the Nerd Font, amber <code>#FFD54F</code> (drawn here with a stand-in)</dd></div>
+      <div><dt>config_files</dt><dd><code>[directory]</code>: cut to the repo root, cyan</dd></div>
+      <div><dt>main</dt><dd><code>[git_branch]</code>, purple</dd></div>
+      <div><dt>»!?⇣1</dt><dd><code>[git_status]</code>: renamed, modified, untracked, 1 commit behind GitHub</dd></div>
+      <div><dt>3s</dt><dd><code>[cmd_duration]</code>: shown when a command took 2 s or more</dd></div>
+      <div><dt>❯</dt><dd><code>[character]</code>: green after success, red after an error</dd></div>
+      <div><dt>hidden now</dt><dd>user (root or ssh), host (ssh only), python, node, rust and C versions (in matching projects)</dd></div>
+    </dl>
+    <figcaption><p>Captured with <code>starship prompt</code> in <code>~/config_files</code> on 2026-10-20 and checked byte by byte: the ribbon is the only private-use glyph in <code>starship.toml</code>. starship re-reads the file for every prompt, so an edit shows up on the next Enter, unlike tmux.</p></figcaption>
+  </figure>
+</section>
+
+<!-- ═══════════════════════════ PART 5: MACHINERY ═══════════════════════════ -->
+<section class="part" id="machinery">
+  <div class="part-head">
+    <span class="pk">Part 5</span>
+    <h2>The repo's own machinery</h2>
+    <p>The files that act on the repo rather than configure a program: the installer, the tests, the sandbox, CI.</p>
+  </div>
+
+  <figure class="plate" id="p18">
+    <header><span class="pn">Plate 18</span><h3>install.sh, one file at a time</h3></header>
+    <div class="scroll">
+      <svg class="svgd" viewBox="0 0 960 424" role="img" aria-label="install.sh lists every file under home/, then for each path asks four questions in order. Uninstall mode: unlink it only if it points into home/. Already the right link: keep it. Same file through a linked parent folder: stop, because moving it would move the repo file. Anything else at that path: move it to a timestamped backup folder, then link. Otherwise link it directly. After the loop it adds bat and fd shims. Editor litter (Vim swap files *.sw?, backups *~) is filtered out of the list, so it is never linked.">
+        <defs>
+          <marker id="p18a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <rect class="bx" x="18" y="18" width="300" height="58" rx="8"/>
+        <text class="tm ts" x="168" y="42" text-anchor="middle">find home/ (minus litter) | sort</text>
+        <text class="ts" x="168" y="62" text-anchor="middle">a name with a control character: stop</text>
+        <line class="ln" x1="320" y1="47" x2="356" y2="47" marker-end="url(#p18a)"/>
+        <text class="tl" x="338" y="39" text-anchor="middle">list</text>
+        <rect class="bx" x="360" y="18" width="220" height="58" rx="8"/>
+        <text class="tb" x="470" y="42" text-anchor="middle">for each path rel</text>
+        <text class="tm ts" x="470" y="62" text-anchor="middle">~/rel  vs  home/rel</text>
+
+        <line class="ln" x1="470" y1="76" x2="470" y2="96" marker-end="url(#p18a)"/>
+        <rect class="bx bx-cond" x="360" y="100" width="220" height="44" rx="8"/>
+        <text class="tm" x="470" y="127" text-anchor="middle">--uninstall?</text>
+        <line class="ln" x1="582" y1="122" x2="616" y2="122" marker-end="url(#p18a)"/>
+        <text class="tl" x="599" y="114" text-anchor="middle">yes</text>
+        <rect class="bx" x="620" y="100" width="322" height="44" rx="8"/>
+        <text x="781" y="127" text-anchor="middle">unlink it, only if it points into home/</text>
+
+        <line class="ln" x1="470" y1="144" x2="470" y2="166" marker-end="url(#p18a)"/>
+        <text class="tl" x="478" y="160">no</text>
+        <rect class="bx bx-cond" x="360" y="170" width="220" height="44" rx="8"/>
+        <text x="470" y="197" text-anchor="middle">already a link to home/rel?</text>
+        <line class="ln" x1="582" y1="192" x2="616" y2="192" marker-end="url(#p18a)"/>
+        <text class="tl" x="599" y="184" text-anchor="middle">yes</text>
+        <rect class="bx bx-ok" x="620" y="170" width="322" height="44" rx="8"/>
+        <text x="781" y="197" text-anchor="middle">keep it: “already in place”</text>
+
+        <line class="ln" x1="470" y1="214" x2="470" y2="236" marker-end="url(#p18a)"/>
+        <text class="tl" x="478" y="230">no</text>
+        <rect class="bx bx-cond" x="360" y="240" width="220" height="44" rx="8"/>
+        <text x="470" y="267" text-anchor="middle">same file via a linked dir?</text>
+        <line class="ln" x1="582" y1="262" x2="616" y2="262" marker-end="url(#p18a)"/>
+        <text class="tl" x="599" y="254" text-anchor="middle">yes</text>
+        <rect class="bx bx-bad" x="620" y="240" width="322" height="44" rx="8"/>
+        <text x="781" y="267" text-anchor="middle">stop: moving it would move the repo file</text>
+
+        <line class="ln" x1="470" y1="284" x2="470" y2="306" marker-end="url(#p18a)"/>
+        <text class="tl" x="478" y="300">no</text>
+        <rect class="bx bx-cond" x="360" y="310" width="220" height="44" rx="8"/>
+        <text x="470" y="337" text-anchor="middle">anything at ~/rel?</text>
+        <line class="ln" x1="582" y1="332" x2="616" y2="332" marker-end="url(#p18a)"/>
+        <text class="tl" x="599" y="324" text-anchor="middle">yes</text>
+        <rect class="bx bx-cond" x="620" y="310" width="322" height="44" rx="8"/>
+        <text class="tm ts" x="781" y="337" text-anchor="middle">mv → ~/.local/state/dotfiles/backup/&lt;time&gt;/rel</text>
+
+        <line class="ln" x1="470" y1="354" x2="470" y2="376" marker-end="url(#p18a)"/>
+        <text class="tl" x="478" y="370">no</text>
+        <path class="ln" d="M781,354 V398 H584" marker-end="url(#p18a)"/>
+        <text class="tl" x="684" y="392" text-anchor="middle">then</text>
+        <rect class="bx bx-repo strong" x="360" y="380" width="220" height="36" rx="8"/>
+        <text class="tm tb" x="470" y="403" text-anchor="middle">ln -s home/rel ~/rel</text>
+
+        <rect class="bx bx-sys" x="18" y="100" width="300" height="118" rx="8"/>
+        <text class="tb" x="34" y="122">after the loop</text>
+        <text class="ts" x="34" y="142">shims in ~/.local/bin: bat → batcat,</text>
+        <text class="ts" x="34" y="160">fd → fdfind (Ubuntu's renamed tools)</text>
+        <text class="ts" x="34" y="182">--dry-run prints each change, does none</text>
+        <text class="ts" x="34" y="200">refuses root unless DOTFILES_ALLOW_ROOT=1</text>
+        <rect class="bx bx-ok" x="18" y="240" width="300" height="76" rx="8"/>
+        <text class="tb c-ok" x="34" y="262">editor litter is skipped</text>
+        <text class="ts" x="34" y="282">swap files (*.sw?) and backups (*~):</text>
+        <text class="tm ts" x="34" y="301">! -name '*.sw?' ! -name '*~'</text>
+      </svg>
+    </div>
+    <figcaption><p>Nothing is ever deleted: a file in the way is moved to a timestamped backup, and <code>--uninstall</code> removes only links that point into this repo. A second run changes nothing (17 already in place), which <code>test.sh</code> section 3 checks. The green box was red when this plate was first drawn: the installer planned <code>link ~/.vimrc.swp</code> (fixed 2026-10-21, <a href="#findings">see Findings</a>).</p></figcaption>
+    <p class="trap"><span class="tt">Beginner trap</span>The installer is not “run once”. Run it again whenever you add a file under <code>home/</code>; it skips everything already linked.</p>
+  </figure>
+
+  <figure class="plate" id="p19">
+    <header><span class="pn">Plate 19</span><h3>test.sh: 57 checks, run in three places</h3></header>
+    <div class="bar" role="img" aria-label="57 offline checks split into six sections: syntax 13, lint 2, install 7, shell startup 11, Vim 8, config files 16.">
+      <span class="s1" style="width:22.81%"></span><span class="s2" style="width:3.51%"></span><span class="s3" style="width:12.28%"></span><span class="s4" style="width:19.30%"></span><span class="s5" style="width:14.04%"></span><span class="s6" style="width:28.06%"></span>
+    </div>
+    <ol class="secs">
+      <li><i class="sw s1"></i><div><b>1 · Syntax, 13</b> <span><code>sh -n</code>, <code>dash -n</code>, <code>bash -n</code>, <code>zsh -n</code>, Python parse</span></div></li>
+      <li><i class="sw s2"></i><div><b>2 · Lint, 2</b> <span>shellcheck: POSIX rules for <code>install.sh</code> and <code>.profile</code></span></div></li>
+      <li><i class="sw s3"></i><div><b>3 · install.sh, 7</b> <span>dry run, links, backup, idempotent, uninstall, editor litter skipped</span></div></li>
+      <li><i class="sw s4"></i><div><b>4 · Shell startup, 11</b> <span>5 modes with empty stderr, agent-safe <code>ls</code>/<code>rm</code>, a real terminal through tmux</span></div></li>
+      <li><i class="sw s5"></i><div><b>5 · Vim, 8</b> <span>stubbed plugins, F8 scope, undo dir 0700, clipboard with a fake xclip, failing formatter, <code>.editorconfig</code> followed</span></div></li>
+      <li><i class="sw s6"></i><div><b>6 · Config files, 16</b> <span>clang-format, clangd, tmux, gdb, git, starship, TOML, YAML; 5 negative controls</span></div></li>
+    </ol>
+    <div class="places">
+      <div class="place"><b>your machine</b><code>make test</code> · <code>make test-full</code><span>a throwaway HOME built with <code>env -i</code>; your real files are never touched</span></div>
+      <div class="place"><b>Arch, from WSL</b><code>make arch-test</code><span>the same script inside the rootless sandbox (<a href="#p20">Plate 20</a>)</span></div>
+      <div class="place"><b>GitHub Actions</b><code>.github/workflows/ci.yml</code><span>ubuntu:26.04 and archlinux:latest; every push and pull request, by hand, and Mondays 03:17 UTC</span></div>
+    </div>
+    <figcaption><p>Today's run (2026-10-21): 57 passed, 0 failed, 0 skipped. <code>--full</code> adds 4 more (plugin install, first-launch colours, F5 build, a typo that clangd must flag within seconds), and CI runs as root, which adds the refuse-root check. A <em>negative control</em> feeds each validator a broken file that it must reject, so a silent pass means something.</p></figcaption>
+  </figure>
+
+  <figure class="plate" id="p20">
+    <header><span class="pn">Plate 20</span><h3>The Arch sandbox: namespaces, no root</h3></header>
+    <div class="scroll">
+      <svg class="svgd" viewBox="0 0 960 300" role="img" aria-label="Everything runs on the shared WSL2 Linux kernel. Your shell, uid 1000, starts bwrap. Inside a user namespace, uid 1000 appears as 0, so pacman runs without real root. Inside a mount namespace, the root folder is ~/.cache/dotfiles/arch-sandbox/root, unpacked from the checksum-verified Arch bootstrap tarball; /dev, /proc and /tmp are fresh; the repo is bind-mounted at the same path; the network is shared.">
+        <defs>
+          <marker id="p20a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <rect class="bx bx-sys" x="10" y="10" width="940" height="280" rx="12"/>
+        <text class="band" x="26" y="32">LINUX KERNEL (WSL2), SHARED BY EVERYTHING BELOW</text>
+        <rect class="bx" x="26" y="48" width="230" height="66" rx="8"/>
+        <text class="tb" x="141" y="74" text-anchor="middle">your shell</text>
+        <text class="tm ts" x="141" y="94" text-anchor="middle">uid 1000, a normal user</text>
+        <line class="ln" x1="258" y1="81" x2="296" y2="81" marker-end="url(#p20a)"/>
+        <text class="tl" x="277" y="73" text-anchor="middle">bwrap</text>
+        <text class="tm tb" x="26" y="146">scripts/arch-sandbox.sh</text>
+        <text class="tm ts" x="26" y="168">setup</text><text class="ts" x="118" y="168">once, about 10 min</text>
+        <text class="tm ts" x="26" y="188">test --full</text><text class="ts" x="118" y="188">run test.sh inside</text>
+        <text class="tm ts" x="26" y="208">shell</text><text class="ts" x="118" y="208">bash -l inside</text>
+        <text class="tm ts" x="26" y="228">run CMD</text><text class="ts" x="118" y="228">one command</text>
+        <text class="tm ts" x="26" y="248">clean</text><text class="ts" x="118" y="248">delete it (~1.5 GB)</text>
+
+        <rect class="bx bx-prog" x="300" y="46" width="634" height="232" rx="10"/>
+        <text class="tb" x="316" y="68">user namespace</text>
+        <text class="ts" x="316" y="86">uid 1000 appears as 0, so pacman runs without real root</text>
+        <rect class="bx bx-sunk" x="316" y="98" width="602" height="166" rx="8"/>
+        <text class="tb" x="332" y="120">mount namespace</text>
+        <text class="tm ts" x="470" y="120">/ = ~/.cache/dotfiles/arch-sandbox/root</text>
+        <rect class="bx" x="332" y="134" width="280" height="54" rx="7"/>
+        <text x="472" y="156" text-anchor="middle">Arch bootstrap tarball</text>
+        <text class="ts" x="472" y="175" text-anchor="middle">sha256-checked, unpacked once</text>
+        <rect class="bx" x="622" y="134" width="280" height="54" rx="7"/>
+        <text class="tm" x="762" y="156" text-anchor="middle">/dev /proc /tmp</text>
+        <text class="ts" x="762" y="175" text-anchor="middle">fresh for each run</text>
+        <rect class="bx bx-repo" x="332" y="198" width="280" height="54" rx="7"/>
+        <text class="tm" x="472" y="220" text-anchor="middle">~/config_files</text>
+        <text class="ts" x="472" y="239" text-anchor="middle">bind-mounted at the same path</text>
+        <rect class="bx" x="622" y="198" width="280" height="54" rx="7"/>
+        <text x="762" y="220" text-anchor="middle">network: shared</text>
+        <text class="ts" x="762" y="239" text-anchor="middle">a proxy on 127.0.0.1 still works</text>
+      </svg>
+    </div>
+    <figcaption><p>The repo must sit at the same absolute path inside because <code>install.sh</code> makes absolute symlinks (<code>/home/ken/config_files/home/…</code>). This is the same kernel feature containers use, without a daemon: <code>bwrap --unshare-user --uid 0 --unshare-pid --bind root / …</code>.</p></figcaption>
+  </figure>
+
+  <figure class="plate" id="p21">
+    <header><span class="pn">Plate 21</span><h3>bootstrap.sh and make</h3></header>
+    <ul class="flow" aria-label="How bootstrap.sh picks a package manager">
+      <li><code>/etc/os-release</code></li><li class="arrow">→ ID / ID_LIKE →</li>
+      <li class="k">arch: <code>sudo pacman -S --needed …</code></li>
+      <li class="k">debian, ubuntu: <code>sudo apt-get install -y …</code> + clone zsh-history-substring-search</li>
+      <li class="b">anything else: stop, install by hand</li>
+    </ul>
+    <div class="scroll">
+      <table class="tbl">
+        <thead><tr><th>make …</th><th>runs</th><th>when</th></tr></thead>
+        <tbody>
+          <tr><td><code>make</code></td><td>lists the targets</td><td>you forgot a name</td></tr>
+          <tr><td><code>bootstrap</code></td><td><code>scripts/bootstrap.sh</code></td><td>once per machine, before installing</td></tr>
+          <tr><td><code>dry-run</code> · <code>install</code> · <code>uninstall</code></td><td><code>./install.sh [--dry-run | --uninstall]</code></td><td>after a clone, or after adding a file</td></tr>
+          <tr><td><code>test</code> · <code>test-full</code></td><td><code>scripts/test.sh [--full]</code></td><td>after every edit</td></tr>
+          <tr><td><code>arch-setup</code> · <code>arch-test</code></td><td><code>scripts/arch-sandbox.sh setup</code> · <code>test --full</code></td><td>before pushing a change that may behave differently on Arch</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figcaption><p><code>bootstrap.sh</code> keeps the proxy variables through <code>sudo</code> (pacman reads the proxy only from the environment), refuses to run as root, and ends with two tips: <code>chsh</code> to zsh, and the WSL PATH setting. Every Makefile target is one line; the logic stays in scripts you can run directly.</p></figcaption>
+  </figure>
+</section>
+
+<!-- ═══════════════════════════ PART 6: CATALOG ═══════════════════════════ -->
+<section class="part" id="files">
+  <div class="part-head">
+    <span class="pk">Part 6</span>
+    <h2>Every file, one line each</h2>
+    <p>All 41 files, this page included. Runtime litter (Vim swap files, caches, <code>*.local</code>) is not listed.</p>
+  </div>
+  <div class="cat">
+    <div class="cat-head"><span>file</span><span>read or run by</span><span>when</span><span>what it does</span></div>
+
+    <div class="grp">home/ <small>each file becomes a symlink at the same path under ~</small></div>
+    <div class="file" id="f-zshenv"><div class="p"><code>home/.zshenv</code><span class="dest">→ ~/.zshenv</span></div><div><span class="lab">by</span>zsh</div><div><span class="lab">when</span>every zsh, scripts too</div><div>One flag that stops Ubuntu running <code>compinit</code> twice. <a href="#p3">Plate 3</a></div></div>
+    <div class="file" id="f-zprofile"><div class="p"><code>home/.zprofile</code><span class="dest">→ ~/.zprofile</span></div><div><span class="lab">by</span>zsh</div><div><span class="lab">when</span>login shells</div><div>Sources <code>/etc/profile</code> (Ubuntu's zsh skips it) and <code>~/.profile</code>, in sh mode. <a href="#p3">Plate 3</a></div></div>
+    <div class="file" id="f-profile"><div class="p"><code>home/.profile</code><span class="dest">→ ~/.profile</span></div><div><span class="lab">by</span>sh, bash, zsh</div><div><span class="lab">when</span>login shells</div><div>Exported environment: PATH, EDITOR, PAGER, LESS, COLORTERM, WSL folders; loads <code>~/.profile.local</code>. <a href="#p3">Plates 3–5</a></div></div>
+    <div class="file" id="f-zshrc"><div class="p"><code>home/.zshrc</code><span class="dest">→ ~/.zshrc</span></div><div><span class="lab">by</span>zsh</div><div><span class="lab">when</span>interactive zsh</div><div>History, completion, keys, cached tool setup, plugins (only with a terminal), prompt. <a href="#p3">Plate 3</a>, <a href="#p7">7</a></div></div>
+    <div class="file" id="f-bash-profile"><div class="p"><code>home/.bash_profile</code><span class="dest">→ ~/.bash_profile</span></div><div><span class="lab">by</span>bash</div><div><span class="lab">when</span>login bash</div><div>Loads <code>.profile</code>, then hands over to <code>.bashrc</code>. <a href="#p4">Plate 4</a></div></div>
+    <div class="file" id="f-bashrc"><div class="p"><code>home/.bashrc</code><span class="dest">→ ~/.bashrc</span></div><div><span class="lab">by</span>bash</div><div><span class="lab">when</span>interactive bash</div><div>Guard for non-interactive use, history, completion, colours, fzf, zoxide, starship. <a href="#p4">Plate 4</a></div></div>
+    <div class="file" id="f-common"><div class="p"><code>home/.config/shell/common.sh</code><span class="dest">→ ~/.config/shell/common.sh</span></div><div><span class="lab">by</span>.zshrc, .bashrc</div><div><span class="lab">when</span>interactive shells</div><div>Human-only wrappers (<code>ls</code> <code>cat</code> <code>rm</code> <code>cp</code> <code>mv</code>), git and package aliases, proxy on and off. <a href="#p6">Plate 6</a></div></div>
+    <div class="file" id="f-inputrc"><div class="p"><code>home/.inputrc</code><span class="dest">→ ~/.inputrc</span></div><div><span class="lab">by</span>readline</div><div><span class="lab">when</span>bash, gdb, python3 start</div><div>Case-insensitive Tab, list on first Tab, ↑ ↓ prefix search, Ctrl-arrows by word. <a href="#p16">Plate 16</a></div></div>
+    <div class="file" id="f-vimrc"><div class="p"><code>home/.vimrc</code><span class="dest">→ ~/.vimrc</span></div><div><span class="lab">by</span>Vim</div><div><span class="lab">when</span>every Vim start</div><div>Options, formatter bridge, clipboard, 23 plugins, keys, LSP setup; turns on Vim's EditorConfig package. 384 lines. <a href="#p8">Plates 8–13</a></div></div>
+    <div class="file" id="f-ftdetect"><div class="p"><code>home/.vim/ftdetect/cpp.vim</code><span class="dest">→ ~/.vim/ftdetect/cpp.vim</span></div><div><span class="lab">by</span>Vim</div><div><span class="lab">when</span>each <code>:filetype on</code></div><div>Dot-less headers (<code>…/c++/14/vector</code>) become cpp; survives <code>:filetype off</code>. <a href="#p8">Plate 8</a></div></div>
+    <div class="file" id="f-clang-format"><div class="p"><code>home/.clang-format</code><span class="dest">→ ~/.clang-format</span></div><div><span class="lab">by</span>clang-format, clangd</div><div><span class="lab">when</span>each format</div><div>Chromium-based C/C++ style: 4 spaces, 80 columns, aligned macros. A nearer project file wins. <a href="#p10">Plates 10–11</a></div></div>
+    <div class="file" id="f-clangd"><div class="p"><code>home/.config/clangd/config.yaml</code><span class="dest">→ ~/.config/clangd/config.yaml</span></div><div><span class="lab">by</span>clangd</div><div><span class="lab">when</span>clangd starts</div><div>Unused-include warnings, clang-tidy families minus 8 noisy checks, background index, inlay hints. <a href="#p9">Plates 9–10</a></div></div>
+    <div class="file" id="f-gitconfig"><div class="p"><code>home/.config/git/config</code><span class="dest">→ ~/.config/git/config</span></div><div><span class="lab">by</span>git</div><div><span class="lab">when</span>every git command</div><div>Shared defaults and aliases; identity stays in <code>~/.gitconfig</code>, which wins. <a href="#p15">Plate 15</a></div></div>
+    <div class="file" id="f-gitignore-global"><div class="p"><code>home/.config/git/ignore</code><span class="dest">→ ~/.config/git/ignore</span></div><div><span class="lab">by</span>git</div><div><span class="lab">when</span>status, add</div><div>Ignored in every repo: swap files, <code>compile_commands.json</code>, clangd cache, OS litter. <a href="#p15">Plate 15</a></div></div>
+    <div class="file" id="f-tmux"><div class="p"><code>home/.config/tmux/tmux.conf</code><span class="dest">→ ~/.config/tmux/tmux.conf</span></div><div><span class="lab">by</span>tmux</div><div><span class="lab">when</span>server start, <code>prefix r</code></div><div>Truecolor, 10 ms Esc, mouse, vi copy mode with OSC 52, h/j/k/l panes, Catppuccin status bar. <a href="#p14">Plate 14</a></div></div>
+    <div class="file" id="f-gdbinit"><div class="p"><code>home/.config/gdb/gdbinit</code><span class="dest">→ ~/.config/gdb/gdbinit</span></div><div><span class="lab">by</span>gdb</div><div><span class="lab">when</span>gdb starts</div><div>History, pretty print, no pager or confirm, debuginfod on, xv6 safe path. <a href="#p16">Plate 16</a></div></div>
+    <div class="file" id="f-starship"><div class="p"><code>home/.config/starship.toml</code><span class="dest">→ ~/.config/starship.toml</span></div><div><span class="lab">by</span>starship</div><div><span class="lab">when</span>every prompt</div><div>The two-line prompt shared by Arch and WSL. <a href="#p17">Plate 17</a></div></div>
+
+    <div class="grp">repo root</div>
+    <div class="file" id="f-readme"><div class="p"><code>README.md</code></div><div><span class="lab">by</span>people</div><div><span class="lab">when</span>first visit</div><div>What the repo is, quick start, how linking works, test commands.</div></div>
+    <div class="file" id="f-license"><div class="p"><code>LICENSE</code></div><div><span class="lab">by</span>people</div><div><span class="lab">when</span>reuse</div><div>MIT. Without a license a public repo is “all rights reserved”.</div></div>
+    <div class="file" id="f-makefile"><div class="p"><code>Makefile</code></div><div><span class="lab">by</span>make</div><div><span class="lab">when</span><code>make &lt;target&gt;</code></div><div>Nine one-line shortcuts to the scripts. <a href="#p21">Plate 21</a></div></div>
+    <div class="file" id="f-install"><div class="p"><code>install.sh</code></div><div><span class="lab">by</span>you (sh)</div><div><span class="lab">when</span>after a clone or a new file</div><div>Links <code>home/*</code> into <code>~</code> (never swap or backup files), backs up what is in the way; <code>--dry-run</code>, <code>--uninstall</code>. <a href="#p18">Plate 18</a></div></div>
+    <div class="file" id="f-editorconfig"><div class="p"><code>.editorconfig</code></div><div><span class="lab">by</span>Vim (package), VS Code (extension)</div><div><span class="lab">when</span>a repo file opens</div><div>UTF-8, LF, 4 spaces (2 for Vim, zsh, YAML, HTML; tabs for Makefile and git config). Found from the path you open: <code>vim ~/.zshrc</code> (the link) gets none of it.</div></div>
+    <div class="file" id="f-gitattributes"><div class="p"><code>.gitattributes</code></div><div><span class="lab">by</span>git</div><div><span class="lab">when</span>add, checkout</div><div>Every text file stored with LF: a CRLF script fails with <code>bad interpreter</code>.</div></div>
+    <div class="file" id="f-gitignore"><div class="p"><code>.gitignore</code></div><div><span class="lab">by</span>git</div><div><span class="lab">when</span>status, add</div><div><code>*.local</code> (secrets, per-machine settings).</div></div>
+    <div class="file" id="f-rootvimrc"><div class="p"><code>vimrc</code></div><div><span class="lab">by</span>nobody</div><div><span class="lab">when</span>never installed</div><div>The 847-line documented Arch twin; GUIDE §9.5 moves it to <code>docs/archive/</code>.</div></div>
+    <div class="file" id="f-ci"><div class="p"><code>.github/workflows/ci.yml</code></div><div><span class="lab">by</span>GitHub Actions</div><div><span class="lab">when</span>push, PR, Mondays</div><div><code>test.sh --full</code> in Ubuntu 26.04 and Arch containers. <a href="#p19">Plate 19</a></div></div>
+
+    <div class="grp">scripts/</div>
+    <div class="file" id="f-bootstrap"><div class="p"><code>scripts/bootstrap.sh</code></div><div><span class="lab">by</span>you</div><div><span class="lab">when</span>once per machine</div><div>Installs the programs with pacman or apt. <a href="#p21">Plate 21</a></div></div>
+    <div class="file" id="f-test"><div class="p"><code>scripts/test.sh</code></div><div><span class="lab">by</span>you, make, CI</div><div><span class="lab">when</span>after every edit</div><div>57 offline checks in a throwaway HOME, 61 with <code>--full</code>. <a href="#p19">Plate 19</a></div></div>
+    <div class="file" id="f-lsp-probe"><div class="p"><code>scripts/lsp-probe.py</code></div><div><span class="lab">by</span>test.sh, you</div><div><span class="lab">when</span>on demand</div><div>Speaks LSP to clangd and prints diagnostics like a compiler. <a href="#p9">Plate 9</a></div></div>
+    <div class="file" id="f-arch-sandbox"><div class="p"><code>scripts/arch-sandbox.sh</code></div><div><span class="lab">by</span>you, make</div><div><span class="lab">when</span>on demand</div><div>Rootless Arch Linux via bubblewrap, to run the tests on Arch from WSL. <a href="#p20">Plate 20</a></div></div>
+
+    <div class="grp">templates/ <small>never installed; copy into a project root</small></div>
+    <div class="file" id="f-tpl-readme"><div class="p"><code>templates/README.md</code></div><div><span class="lab">by</span>you</div><div><span class="lab">when</span>a new C project</div><div>How clangd learns your flags, and which template goes where. <a href="#p10">Plate 10</a></div></div>
+    <div class="file" id="f-tpl-clang-tidy"><div class="p"><code>templates/.clang-tidy</code></div><div><span class="lab">by</span>clang-tidy, clangd</div><div><span class="lab">when</span>in a project</div><div>The same checks as <code>config.yaml</code>, for the command line and CI.</div></div>
+    <div class="file" id="f-tpl-clangd"><div class="p"><code>templates/abstract-machine/.clangd</code></div><div><span class="lab">by</span>clangd</div><div><span class="lab">when</span>files in ~/os-workbench</div><div>Adds <code>-ffreestanding</code>, removes <code>-Werror</code>: no clang-vs-gcc false errors. <a href="#p10">Plate 10</a></div></div>
+    <div class="file" id="f-tpl-flags"><div class="p"><code>templates/cpp-practice/compile_flags.txt</code></div><div><span class="lab">by</span>clangd</div><div><span class="lab">when</span>files in ~/algo</div><div>One flag list for single-file programs: <code>-std=c++17</code>, warnings, <code>-I.</code> <a href="#p10">Plate 10</a></div></div>
+
+    <div class="grp">docs/</div>
+    <div class="file" id="f-guide"><div class="p"><code>docs/GUIDE.md</code></div><div><span class="lab">by</span>you</div><div><span class="lab">when</span>you ask “why?”</div><div>Every decision from first principles, sections 0–14.</div></div>
+    <div class="file" id="f-learn"><div class="p"><code>docs/LEARN-AND-SYNC.md</code></div><div><span class="lab">by</span>you</div><div><span class="lab">when</span>study sessions</div><div>The Phase 0/A/B/C study plan and the two-machine sync loop.</div></div>
+    <div class="file" id="f-tour"><div class="p"><code>docs/REPO-TOUR.md</code></div><div><span class="lab">by</span>you</div><div><span class="lab">when</span>orientation</div><div>Negative controls, then the repo top to bottom in text.</div></div>
+    <div class="file" id="f-shellstartup"><div class="p"><code>docs/SHELL-STARTUP.md</code></div><div><span class="lab">by</span>you</div><div><span class="lab">when</span>“why do the two profiles differ?”</div><div>bash and zsh login startup side by side, traced: why <code>.zprofile</code> needs <code>emulate sh -c</code> and <code>.bash_profile</code> does not. <a href="#p3">Plates 3–5</a></div></div>
+    <div class="file" id="f-fixnotes"><div class="p"><code>docs/FIX-NOTES.md</code></div><div><span class="lab">by</span>you</div><div><span class="lab">when</span>after a fix</div><div>What broke, why, how it was fixed, what to keep. First entry: the three <a href="#findings">Findings</a>.</div></div>
+    <div class="file" id="f-atlas"><div class="p"><code>docs/ATLAS.html</code></div><div><span class="lab">by</span>a browser</div><div><span class="lab">when</span>now</div><div>This page: the same repo as pictures.</div></div>
+    <div class="file" id="f-archive"><div class="p"><code>docs/archive/README.md</code></div><div><span class="lab">by</span>you</div><div><span class="lab">when</span>history</div><div>Index of archived files; they arrive with GUIDE §9.5.</div></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ PART 7: FINDINGS ═══════════════════════════ -->
+<section class="part" id="findings">
+  <div class="part-head">
+    <span class="pk">Part 7</span>
+    <h2>Findings from drawing the plates</h2>
+    <p>Three loose ends and two notes. The loose ends were fixed on 2026-10-21, each with a regression test that failed before the fix; the full write-up is <code>docs/FIX-NOTES.md</code>.</p>
+  </div>
+  <ul class="finds">
+    <li><span class="chip ok sev">fixed</span><div><h4>install.sh would link Vim's swap file</h4>
+      <p>It links every file under <code>home/</code>, editor litter included. With Vim editing <code>~/.vimrc</code>, the swap file sits at <code>home/.vimrc.swp</code>.</p>
+      <p class="ev">Evidence: <code>./install.sh --dry-run</code> printed <code>link ~/.vimrc.swp</code> and “Done: 1 linked, 17 already in place”.</p>
+      <p>Fixed: its <code>find</code> skips <code>*.sw?</code> and <code>*~</code>. test.sh section 3 plants both in a fake repo and checks that neither gets linked; with a real swap file present the dry run now says “0 linked, 17 already in place”.</p></div></li>
+    <li><span class="chip ok sev">fixed</span><div><h4>git/ignore says “the vimrc keeps them in ~/.vim”</h4>
+      <p><code>home/.vimrc</code> sets only <code>'undodir'</code>; swap files land next to the file being edited.</p>
+      <p class="ev">Evidence: five swap files in the repo today (<code>.install.sh.swp</code>, <code>home/.vimrc.swp</code>, three in <code>scripts/</code>), with three Vim sessions open on it. They are yours, so they were left alone.</p>
+      <p>Fixed: the comment now says Vim writes them next to the file it edits (for a symlink, next to its target), not into <code>~/.vim</code>. GUIDE §1.4 and LEARN-AND-SYNC repeated the old claim; corrected too.</p></div></li>
+    <li><span class="chip ok sev">fixed</span><div><h4>.editorconfig does nothing in this Vim</h4>
+      <p>Vim 9.1 ships EditorConfig support as an <em>optional</em> package. <code>home/.vimrc</code> never runs <code>packadd! editorconfig</code>.</p>
+      <p class="ev">Evidence: <code>/usr/share/vim/vim91/pack/dist/opt/editorconfig</code> exists; the startup trace loaded 0 editorconfig scripts. VS Code needs its extension too.</p>
+      <p>Fixed: <code>silent! packadd! editorconfig</code> at line 7, after four indent rules were corrected to match the files (<code>.clang-format</code>, <code>.clang-tidy</code>, <code>*.html</code>, the root <code>vimrc</code>). It works by the path you open, so a dotfile opened through its <code>~</code> link still gets your vimrc's indent.</p></div></li>
+    <li><span class="chip sys sev">note</span><div><h4>Startup time is above the README's number</h4>
+      <p>Login zsh measured 81 ms (non-login 62 ms) today, median of 8 in a real terminal. The Windows PATH is still appended (10 <code>/mnt/c</code> folders), so the GUIDE's WSL PATH tip (README: 31 ms) is not applied on this machine. Different stopwatches give different numbers; compare runs of the same method.</p></div></li>
+    <li><span class="chip sys sev">note</span><div><h4>Local main is one commit behind GitHub</h4>
+      <p>The prompt shows <code>⇣1</code>: GitHub still has the laptop's commit, and the fresh start in GUIDE §9.5 has not run yet. Until it does, <code>docs/archive/</code> holds only its README and the root <code>vimrc</code> stays where it is.</p></div></li>
+  </ul>
+</section>
+
+<!-- ═══════════════════════════ PART 8: LEARN ═══════════════════════════ -->
+<section class="part" id="learn">
+  <div class="part-head">
+    <span class="pk">Part 8</span>
+    <h2>What to keep, and how to practise</h2>
+    <p>The rules that explain all 21 plates, the trade-offs, and the method used to make them.</p>
+  </div>
+
+  <div class="rules">
+    <div class="rule"><h4>Nearest file wins</h4><p>The tool searches upward from the file you edit and stops at the first match.</p><div class="who"><span class="chip prog">clang-format</span><span class="chip prog">clangd flags</span><span class="chip prog">.editorconfig</span></div></div>
+    <div class="rule"><h4>Later layer wins</h4><p>Every layer is read; a key set later overrides the same key set earlier.</p><div class="who"><span class="chip prog">git config</span><span class="chip prog">clangd .clangd on config.yaml</span><span class="chip prog">shell variables</span></div></div>
+    <div class="rule"><h4>First file only</h4><p>The program reads the first file that exists and never looks at the rest.</p><div class="who"><span class="chip prog">gdb</span><span class="chip prog">login bash: .bash_profile</span></div></div>
+  </div>
+
+  <div class="prose">
+    <h3>Pros and cons of this design</h3>
+    <div class="scroll"><table class="tbl">
+      <thead><tr><th>choice</th><th>gain</th><th>cost</th></tr></thead>
+      <tbody>
+        <tr><td>symlinks from one <code>home/</code> mirror</td><td>edits land in git at once; one small installer</td><td>a checked-out branch changes the live machine; editor litter has to be filtered out (Findings)</td></tr>
+        <tr><td>plain POSIX shell, no dotfile manager</td><td>nothing new to learn; every step readable</td><td>per-machine differences only through <code>*.local</code> files, no templating</td></tr>
+        <tr><td>one <code>common.sh</code> for bash and zsh</td><td>one set of aliases, one place to fix</td><td>POSIX-only syntax there: no arrays, no <code>[[ ]]</code></td></tr>
+        <tr><td>cached tool setup in <code>~/.cache/zsh/init</code></td><td>about 2 ms saved per tool per shell</td><td>a hidden layer; you have to know where to look</td></tr>
+        <tr><td>tests drive the real programs</td><td>caught bugs reading could not (eza, E121, E475)</td><td>Linux-only harness; needs tmux, and minutes with <code>--full</code></td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>How to improve</h3>
+    <ul>
+      <li><b>Now:</b> run GUIDE §9.5 (the three loose ends are fixed).</li>
+      <li><b>Next:</b> apply the WSL PATH tip and re-measure; decide whether dotfiles opened through <code>~</code> should follow <code>.editorconfig</code> too (FIX-NOTES lists the options).</li>
+      <li><b>Bleeding edge:</b> declarative, templated dotfiles (chezmoi, or Nix Home Manager); deferred zsh plugin loading (zsh-defer) so the prompt appears before plugins finish.</li>
+    </ul>
+
+    <h3>Mental checklist</h3>
+    <ol>
+      <li>Which kind of shell is this: login, interactive, and is fd 0 a terminal?</li>
+      <li>Who sources whom in that mode? (<a href="#p5">Plate 5</a>)</li>
+      <li>Is the file I am editing the live one? <code>readlink ~/.zshrc</code></li>
+      <li>Is it read once (tmux, gdb, shell rc) or every time (starship, git)?</li>
+      <li>Which rule decides the winner: nearest, later, or first?</li>
+      <li>Did I ask the program, or trust a comment? (<code>sourcetrace</code>, <code>:scriptnames</code>, <code>--show-origin</code>, <code>--dry-run</code>)</li>
+    </ol>
+
+    <h3>How these plates were made</h3>
+    <div class="stage"><h4>1 · Trace the shells</h4>
+      <p><span class="lbl">Thinking</span>Comments describe intent. <code>zsh -o sourcetrace</code> and bash's <code>PS4</code> with <code>-x</code>, run under <code>script</code> so a real terminal exists, report every file actually sourced, including 13 system scripts the repo never mentions.</p>
+      <p><span class="lbl les">Lesson</span>Ask the program for its load order; do not rebuild it from comments.</p></div>
+    <div class="stage"><h4>2 · Trace Vim, after a false start</h4>
+      <p><span class="lbl">Thinking</span>The first probe (Vim under <code>script</code>, ended by a timer) never quit. Instead of debugging the probe, the tmux harness that <code>test.sh</code> already proves on every run was reused, and it worked the first time.</p>
+      <p><span class="lbl les">Lesson</span>When a probe hangs, reuse a harness that is already tested.</p></div>
+    <div class="stage"><h4>3 · Cross-check with the source</h4>
+      <p><span class="lbl">Thinking</span>The trace put gruvbox (#117) just before the LSP modules (#118). The plugin source explains why: both are VimEnter autocommands, they run in definition order, and the vimrc's was defined first.</p>
+      <p><span class="lbl les">Lesson</span>A trace says what happened; the source says why. Use both.</p></div>
+    <div class="stage"><h4>4 · Let dry runs and counts find bugs</h4>
+      <p><span class="lbl">Thinking</span>Drawing Plate 18 meant running <code>install.sh --dry-run</code>, which printed <code>link ~/.vimrc.swp</code>. Counting scripts for Plate 8 showed 0 editorconfig scripts. Both are fixed now (Findings).</p>
+      <p><span class="lbl les">Lesson</span>Drawing a mechanism forces you to check it, and checking finds bugs.</p></div>
+    <p><b>The short version.</b> Every startup was traced on this machine instead of read from comments: zsh and bash with source traces, Vim with <code>:scriptnames</code> inside a tmux terminal after a first probe hung, and tmux, git and gdb by asking each program. The traces matched the configs. The cross-checks turned up three loose ends, since fixed: <code>install.sh</code> would link a Vim swap file, a git/ignore comment was stale, and <code>.editorconfig</code> was inert in Vim.</p>
+    <p><b>The transferable principles (the part to keep):</b></p>
+    <ol>
+      <li>Ask the program, not the comment: every tool here can report what it loaded.</li>
+      <li>Learn the precedence rule (nearest, later, first) before you edit a config.</li>
+      <li>Two independent sources, a trace and the source code, beat one.</li>
+      <li>Reuse proven harnesses, such as tmux as a fake terminal, instead of inventing probes.</li>
+      <li>A dry run is a free test. Run it whenever you draw or change a flow.</li>
+    </ol>
+
+    <h3>Where to go next</h3>
+    <ol>
+      <li>Run <code>zsh -o sourcetrace -i -c exit</code> in a VS Code terminal and compare with <a href="#p3">Plate 3</a>: which rows disappear?</li>
+      <li>In Vim, open a <code>.c</code> file and run <code>:scriptnames</code>: find where the c ftplugin and indent files load.</li>
+      <li>Read <code>:help startup</code>, zsh's “STARTUP/SHUTDOWN FILES”, and the INVOCATION section of <code>man bash</code>.</li>
+      <li>Then GUIDE §3 (LSP) and §5 (shells); LEARN-AND-SYNC A4 and A5 walk the same flows with exercises.</li>
+      <li>Stretch: break a fix on purpose. Delete <code>! -name '*.sw?'</code> from <code>install.sh</code>, run <code>make test</code>, watch section 3 turn red, then undo the edit.</li>
+    </ol>
+  </div>
+
+  <p class="foot">Made 2026-10-20 from the files in <code>~/config_files</code> and from traces on Ubuntu 26.04.1 under WSL2. The files are the source of truth; redraw a plate when its file changes.</p>
+</section>
+
+</main>
+</div>
+</div>
+
+<script>
+// Open the index on wide screens; on phones keep it folded until asked for.
+(function () {
+  var box = document.getElementById('treebox');
+  if (!box || !window.matchMedia) return;
+  var wide = window.matchMedia('(min-width: 1100px)');
+  function sync() { if (wide.matches) box.open = true; }
+  sync();
+  if (wide.addEventListener) wide.addEventListener('change', sync);
+  box.addEventListener('click', function (e) {
+    if (!wide.matches && e.target.closest && e.target.closest('a')) box.open = false;
+  });
+})();
+</script>
+</body>
+</html>
